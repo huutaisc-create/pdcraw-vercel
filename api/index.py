@@ -168,6 +168,7 @@ class handler(BaseHTTPRequestHandler):
             'scan_updates', 'check_update_status',
             'do_upload', 'check_upload_content',
             'sync_progress', 'sync_selected',
+            'delete_menu_map',
         }
 
         if action in LOCAL_ACTIONS:
@@ -213,6 +214,21 @@ class handler(BaseHTTPRequestHandler):
                         cur.execute("UPDATE stories SET crawl_status=CASE WHEN downloaded_chapters>0 THEN 'paused' ELSE 'pending' END, admin_control=NULL WHERE id=%s", (sid,))
                 conn.commit()
                 self._json({'success': True, 'message': f'Updated {len(ids)} stories.'})
+
+            elif action == 'get_slugs_by_ids':
+                ids = data.get('ids', [])
+                if ids:
+                    cur.execute("SELECT id, slug FROM stories WHERE id = ANY(%s)", (ids,))
+                    self._json({'success': True, 'stories': [dict(r) for r in cur.fetchall()]})
+                else:
+                    self._json({'success': True, 'stories': []})
+
+            elif action == 'reset_bot':
+                ids = data.get('ids', [])
+                if ids:
+                    cur.execute("UPDATE stories SET last_account_idx=NULL, last_updated=NOW() WHERE id = ANY(%s)", (ids,))
+                    conn.commit()
+                self._json({'success': True, 'updated': len(ids)})
 
             elif action == 'batch_change_status':
                 ids    = data.get('ids', [])

@@ -127,6 +127,12 @@
                             <button id="btn-change-status" onclick="openChangeStatusModal()" class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg shadow-yellow-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🏷</span><span>ĐỔI TRẠNG THÁI</span>
                             </button>
+                            <button onclick="resetBot()" class="bg-slate-600 hover:bg-slate-500 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>🤖</span><span>RESET BOT</span>
+                            </button>
+                            <button onclick="deleteMenuMap()" class="bg-rose-800 hover:bg-rose-700 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>🗑</span><span>XÓA MENU MAP</span>
+                            </button>
                             <button id="btn-check-upload" onclick="openCheckUploadModal()" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg shadow-teal-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>⬆</span><span>CHECK & UPLOAD</span>
                             </button>
@@ -1048,6 +1054,48 @@
             
             btn.innerText = originalText; btn.disabled = false;
             loadStories();
+        }
+
+        async function deleteMenuMap() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+
+            // Lấy slug từ các row đã tick
+            const slugs = Array.from(checked).map(c => {
+                const row = c.closest('tr');
+                const a = row ? row.querySelector('td:nth-child(2) a') : null;
+                return a ? a.getAttribute('href') : null;
+            }).filter(Boolean);
+
+            if (!confirm(`Xóa menu_map_v1.json của ${ids.length} truyện?\nSau đó chạy script delete_menu_map.py trên máy để thực hiện.`)) return;
+
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
+                    action: 'delete_menu_map',
+                    ids: ids,
+                    story_ids: ids
+                })});
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ Đã ghi lệnh xóa ${ids.length} truyện vào hàng đợi. Chạy delete_menu_map.py để thực hiện!`, 'green');
+                } else {
+                    showToast('❌ ' + data.message, 'red');
+                }
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
+        }
+
+        async function resetBot() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            if (!confirm(`Reset bot cho ${ids.length} truyện đã chọn?`)) return;
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'reset_bot', ids }) });
+                const data = await res.json();
+                showToast(`✅ Đã reset bot cho ${data.updated ?? ids.length} truyện`, 'green');
+                loadStories();
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
         }
 
         function openChangeStatusModal() {
