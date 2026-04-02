@@ -6,10 +6,14 @@ api/agent.py — Endpoint dành riêng cho local_agent.py
 - POST /api/agent?action=update_story  → agent cập nhật DB sau khi scrape
 """
 from http.server import BaseHTTPRequestHandler
-import json, os, datetime, urllib.parse
-import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
-from _db import get_conn, json_serial
+import json, os, datetime, urllib.parse, sys
+
+def _import_db():
+    _api_dir = os.path.dirname(os.path.abspath(__file__))
+    if _api_dir not in sys.path:
+        sys.path.insert(0, _api_dir)
+    from _db import get_conn, json_serial
+    return get_conn, json_serial
 
 AGENT_SECRET = os.environ.get("AGENT_SECRET", "changeme")
 
@@ -22,6 +26,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Agent-Secret')
 
     def _json(self, data, status=200):
+        _, json_serial = _import_db()
         body = json.dumps(data, default=json_serial, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -52,6 +57,7 @@ class handler(BaseHTTPRequestHandler):
 
         if action == 'poll':
             try:
+                get_conn, _ = _import_db()
                 conn = get_conn(); cur = conn.cursor()
                 cur.execute("""
                     SELECT id, action, payload FROM agent_commands
@@ -84,6 +90,7 @@ class handler(BaseHTTPRequestHandler):
         data   = self._body()
 
         try:
+            get_conn, _ = _import_db()
             conn = get_conn(); cur = conn.cursor()
 
             # Báo lệnh đã xong + lưu kết quả
