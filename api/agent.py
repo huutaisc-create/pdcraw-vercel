@@ -7,6 +7,8 @@ api/agent.py — Endpoint dành riêng cho local_agent.py
 """
 from http.server import BaseHTTPRequestHandler
 import json, os, datetime, urllib.parse
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
 from _db import get_conn, json_serial
 
 AGENT_SECRET = os.environ.get("AGENT_SECRET", "changeme")

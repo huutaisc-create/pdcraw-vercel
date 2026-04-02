@@ -4,6 +4,8 @@ Phục vụ HTML admin UI tại / và điều phối các /api/* routes.
 """
 from http.server import BaseHTTPRequestHandler
 import json, os, urllib.parse
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
 from _db import get_conn, json_serial
 
 # Lazy-load HTML để tránh crash khi cold-start nếu file chưa có
