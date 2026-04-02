@@ -158,6 +158,26 @@ class handler(BaseHTTPRequestHandler):
                     config = {'total_bots': 1, 'startup_delay': 60}
                 self._json({'success': True, 'config': config})
 
+            # ── agent status ─────────────────────────────────────────────
+            elif action == 'agent_status':
+                cur.execute("SELECT value FROM agent_kv WHERE key='heartbeat'")
+                row = cur.fetchone()
+                if row:
+                    hb = json.loads(row['value'])
+                    ts_str = hb.get('ts', '')
+                    try:
+                        from datetime import datetime, timezone
+                        ts = datetime.fromisoformat(ts_str)
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=timezone.utc)
+                        age = (datetime.now(timezone.utc) - ts).total_seconds()
+                        online = age < 60
+                    except:
+                        online = False
+                    self._json({'online': online, 'running': hb.get('running', 0), 'agent_id': hb.get('agent_id', ''), 'ts': ts_str})
+                else:
+                    self._json({'online': False, 'running': 0})
+
             else:
                 self._json({'error': f'unknown GET action: {action}'}, 400)
 
