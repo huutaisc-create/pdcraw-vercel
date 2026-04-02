@@ -145,6 +145,16 @@ class handler(BaseHTTPRequestHandler):
                 ]
                 self._json({'accounts': accounts})
 
+            # ── bot config ──────────────────────────────────────────────────
+            elif action == 'get_bot_config':
+                cur.execute("SELECT value FROM agent_kv WHERE key='bot_config'")
+                row = cur.fetchone()
+                if row:
+                    config = json.loads(row['value'])
+                else:
+                    config = {'total_bots': 1, 'startup_delay': 60}
+                self._json({'success': True, 'config': config})
+
             else:
                 self._json({'error': f'unknown GET action: {action}'}, 400)
 
@@ -192,7 +202,19 @@ class handler(BaseHTTPRequestHandler):
         try:
             conn = get_conn(); cur = conn.cursor()
 
-            if action == 'toggle_select':
+            elif action == 'set_bot_config':
+                total_bots    = data.get('total_bots', 1)
+                startup_delay = data.get('startup_delay', 60)
+                config = {'total_bots': int(total_bots), 'startup_delay': int(startup_delay)}
+                cur.execute("""
+                    INSERT INTO agent_kv(key, value)
+                    VALUES ('bot_config', %s)
+                    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value
+                """, (json.dumps(config, ensure_ascii=False),))
+                conn.commit()
+                self._json({'success': True, 'config': config})
+
+            elif action == 'toggle_select':
                 sid = data['id']; is_sel = data['selected']; admin = data.get('admin')
                 cur.execute("SELECT crawl_status, downloaded_chapters FROM stories WHERE id = %s", (sid,))
                 row = cur.fetchone()
