@@ -205,7 +205,7 @@ class handler(BaseHTTPRequestHandler):
         try:
             conn = get_conn(); cur = conn.cursor()
 
-            elif action == 'set_bot_config':
+            if action == 'set_bot_config':
                 total_bots    = data.get('total_bots', 1)
                 startup_delay = data.get('startup_delay', 60)
                 config = {'total_bots': int(total_bots), 'startup_delay': int(startup_delay)}
