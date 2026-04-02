@@ -69,6 +69,10 @@ HEADERS = {'X-Agent-Secret': AGENT_SECRET, 'Content-Type': 'application/json'}
 SCRAPER_PIDS = []
 PIDS_LOCK    = threading.Lock()
 
+# Tracking cmd_ids đang xử lý để tránh chạy lại
+PROCESSING_IDS = set()
+PROCESSING_LOCK = threading.Lock()
+
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 def _request(method, path, body=None, timeout=30):
@@ -474,17 +478,30 @@ def main():
                 cmd_id = resp['id']
                 action = resp['action']
                 payload= resp.get('payload', {})
-                print(f"[→] Nhận lệnh: {action} (id={cmd_id})")
 
-                handler_fn = HANDLERS.get(action)
-                if handler_fn:
-                    threading.Thread(
-                        target=handler_fn,
-                        args=(payload, cmd_id),
-                        daemon=True
-                    ).start()
-                else:
-                    report_done(cmd_id, {'success': False, 'message': f'Unknown action: {action}'}, 'error')
+                # Bỏ qua nếu lệnh này đang được xử lý
+                with PROCESSING_LOCK:
+                    if cmd_id in PROCESSING_IDS:
+                        pass  # skip
+                    else:
+                        PROCESSING_IDS.add(cmd_id)
+                        print(f"[→] Nhận lệnh: {action} (id={cmd_id})")
+                        handler_fn = HANDLERS.get(action)
+                        if handler_fn:
+                            def _run(fn, p, cid):
+                                try:
+                                    fn(p, cid)
+                                finally:
+                                    with PROCESSING_LOCK:
+                                        PROCESSING_IDS.discard(cid)
+                            threading.Thread(
+                                target=_run,
+                                args=(handler_fn, payload, cmd_id),
+                                daemon=True
+                            ).start()
+                        else:
+                            PROCESSING_IDS.discard(cmd_id)
+                            report_done(cmd_id, {'success': False, 'message': f'Unknown action: {action}'}, 'error')
 
         except KeyboardInterrupt:
             print("\n[*] Agent dừng."); break
