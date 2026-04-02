@@ -672,8 +672,9 @@
                 }
     
             } catch(e) {
+                // Bỏ qua AbortError — do race condition fix huỷ request cũ, không phải lỗi thật
+                if (e && e.name === 'AbortError') return;
                 console.error(e);
-                // alert("Lỗi tải danh sách: " + e.message); // Optional: Uncomment if needed
                 document.getElementById('story-list').innerHTML = `<tr><td colspan="7" class="text-center p-8 text-red-500">Lỗi kết nối: ${e.message}</td></tr>`;
                 return;
             }
