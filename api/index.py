@@ -215,6 +215,20 @@ class handler(BaseHTTPRequestHandler):
                 conn.commit()
                 self._json({'success': True, 'message': f'Updated {len(ids)} stories.'})
 
+            elif action == 'batch_change_status':
+                ids    = data.get('ids', [])
+                status = data.get('status', '')
+                VALID  = {'pending','selected','crawling','paused','completed','error','repairing'}
+                if status not in VALID:
+                    self._json({'success': False, 'message': f'Invalid status: {status}'}); conn.close(); return
+                if ids:
+                    cur.execute(
+                        f"UPDATE stories SET crawl_status=%s, last_updated=NOW() WHERE id = ANY(%s)",
+                        (status, ids)
+                    )
+                    conn.commit()
+                self._json({'success': True, 'updated': len(ids)})
+
             elif action == 'crawl_missing':
                 ids = data.get('ids', [])
                 for sid in ids:

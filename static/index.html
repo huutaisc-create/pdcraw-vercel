@@ -124,6 +124,9 @@
                             <button onclick="killScrapers()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg shadow-red-500/20 transition-all active:scale-95">STOP</button>
                             <button id="btn-sync" onclick="syncSelected()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg shadow-indigo-500/20 transition-all active:scale-95">SYNC SELECTED</button>
                             <button id="btn-missing" onclick="crawlMissing()" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg shadow-purple-500/20 transition-all active:scale-95">CRAWL MISSING</button>
+                            <button id="btn-change-status" onclick="openChangeStatusModal()" class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg shadow-yellow-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>🏷</span><span>ĐỔI TRẠNG THÁI</span>
+                            </button>
                             <button id="btn-check-upload" onclick="openCheckUploadModal()" class="bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg shadow-teal-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>⬆</span><span>CHECK & UPLOAD</span>
                             </button>
@@ -374,6 +377,29 @@
         </div>
     </div>
 
+    <!-- Change Status Modal -->
+    <div id="modal-change-status" class="fixed inset-0 bg-black/90 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-slate-900 p-8 rounded-2xl w-full max-w-sm border border-yellow-500/40 shadow-[0_0_50px_rgba(234,179,8,0.15)]">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-yellow-500/20 rounded-full flex items-center justify-center text-xl">🏷</div>
+                <div>
+                    <h2 class="text-lg font-bold text-yellow-400">Đổi Trạng Thái</h2>
+                    <p class="text-slate-500 text-xs mt-0.5" id="cs-subtitle">Chọn trạng thái muốn chuyển</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mb-6">
+                <button onclick="applyChangeStatus('pending')"   class="cs-opt py-3 rounded-lg font-bold text-xs border border-slate-700 bg-slate-800 hover:border-slate-400 text-slate-300 transition-all active:scale-95">⬜ pending</button>
+                <button onclick="applyChangeStatus('selected')"  class="cs-opt py-3 rounded-lg font-bold text-xs border border-indigo-700 bg-indigo-900/40 hover:border-indigo-400 text-indigo-300 transition-all active:scale-95">🟣 selected</button>
+                <button onclick="applyChangeStatus('crawling')"  class="cs-opt py-3 rounded-lg font-bold text-xs border border-sky-700 bg-sky-900/40 hover:border-sky-400 text-sky-300 transition-all active:scale-95">🔵 crawling</button>
+                <button onclick="applyChangeStatus('paused')"    class="cs-opt py-3 rounded-lg font-bold text-xs border border-yellow-700 bg-yellow-900/40 hover:border-yellow-400 text-yellow-300 transition-all active:scale-95">🟡 paused</button>
+                <button onclick="applyChangeStatus('completed')" class="cs-opt py-3 rounded-lg font-bold text-xs border border-green-700 bg-green-900/40 hover:border-green-400 text-green-300 transition-all active:scale-95">🟢 completed</button>
+                <button onclick="applyChangeStatus('error')"     class="cs-opt py-3 rounded-lg font-bold text-xs border border-red-700 bg-red-900/40 hover:border-red-400 text-red-300 transition-all active:scale-95">🔴 error</button>
+                <button onclick="applyChangeStatus('repairing')" class="cs-opt py-3 rounded-lg font-bold text-xs border border-purple-700 bg-purple-900/40 hover:border-purple-400 text-purple-300 transition-all active:scale-95 col-span-2">🟤 repairing</button>
+            </div>
+            <button onclick="closeModal('modal-change-status')" class="w-full py-2 rounded text-slate-500 hover:text-white text-xs font-bold transition-colors">Huỷ</button>
+        </div>
+    </div>
+
     <!-- Login Modal -->
     <div id="modal-login" class="fixed inset-0 bg-black/95 flex flex-col items-center justify-center z-[100] backdrop-blur-md hidden">
         <div class="glass p-8 rounded-2xl w-full max-w-md border border-orange-500/30 text-center shadow-[0_0_100px_rgba(249,115,22,0.1)]">
@@ -463,13 +489,8 @@
 
         // ── HELPER: fetch có timeout 15s để không treo mãi ──────────────────
         async function _fetchAPI(url, opts = {}) {
-            const timeoutMs = 15000;
             const controller = new AbortController();
-            // Nếu đã có signal bên ngoài (AbortController của loadStories), link lại
-            if (opts.signal) {
-                opts.signal.addEventListener('abort', () => controller.abort());
-            }
-            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            const timer = setTimeout(() => controller.abort(), 15000);
             try {
                 return await fetch(url, { ...opts, signal: controller.signal });
             } finally {
@@ -477,14 +498,14 @@
             }
         }
 
-        async function loadStories(signal) {
+        async function loadStories() {
             try {
                 const search = document.getElementById('search').value;
                 const status = document.getElementById('status-filter').value;
                 const category = document.getElementById('category-filter').value;
                 const book_status = document.getElementById('book-status-filter').value;
                 const curAdmin = localStorage.getItem('admin_name');
-                const res = await _fetchAPI(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&admin=${curAdmin || ''}&source=${currentSource}`, { signal });
+                const res = await _fetchAPI(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&admin=${curAdmin || ''}&source=${currentSource}`);
                 
                 if (!res.ok) throw new Error(`Server Error: ${res.status} ${res.statusText}`);
                 
@@ -1029,6 +1050,34 @@
             loadStories();
         }
 
+        function openChangeStatusModal() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            document.getElementById('cs-subtitle').innerText = `Áp dụng cho ${checked.length} truyện đã chọn`;
+            document.getElementById('modal-change-status').classList.remove('hidden');
+        }
+
+        async function applyChangeStatus(newStatus) {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            if (ids.length === 0) return;
+
+            closeModal('modal-change-status');
+
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
+                    action: 'batch_change_status',
+                    ids: ids,
+                    status: newStatus
+                })});
+                const data = await res.json();
+                showToast(`✅ Đã đổi ${data.updated ?? ids.length} truyện → ${newStatus}`, 'green');
+                loadStories();
+            } catch(e) {
+                showToast('❌ Lỗi: ' + e.message, 'red');
+            }
+        }
+
         async function crawlMissing() {
             const checked = document.querySelectorAll('.story-ck:checked');
             if(checked.length === 0) return alert('Chưa chọn truyện nào!');
@@ -1056,20 +1105,16 @@
 
         let pauseAutoRefresh = false;
 
-        // ── FIX RACE CONDITION ────────────────────────────────────────────────
-        // Wrap loadStories: huỷ request cũ đang treo + chặn 2 request song song
-        // cũng pass AbortSignal vào fetch để backend không bị treo kết nối cũ
-        let _loadAbortCtrl = null;
+        // ── CHỐNG LOAD TRÙNG ─────────────────────────────────────────────────
+        // Nếu đang load rồi thì bỏ qua, không abort — tránh bảng trắng
         let _loadBusy = false;
         const _loadStoriesOrig = loadStories;
         loadStories = async function() {
-            if (_loadAbortCtrl) { try { _loadAbortCtrl.abort(); } catch(_){} }
             if (_loadBusy) return;
             _loadBusy = true;
-            _loadAbortCtrl = new AbortController();
-            try { await _loadStoriesOrig(_loadAbortCtrl.signal); }
+            try { await _loadStoriesOrig(); }
             catch(e) { if (e && e.name !== 'AbortError') console.warn('[loadStories]', e); }
-            finally { _loadBusy = false; _loadAbortCtrl = null; }
+            finally { _loadBusy = false; }
         };
 
         setInterval(() => { if (currentTab === 'stories' && !pauseAutoRefresh) loadStories(); }, 5000);
