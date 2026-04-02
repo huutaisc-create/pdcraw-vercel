@@ -98,8 +98,25 @@ class handler(BaseHTTPRequestHandler):
 
                 w = ('WHERE ' + ' AND '.join(where)) if where else ''
 
-                cur.execute(f"SELECT * FROM stories {w} ORDER BY last_updated DESC LIMIT %s OFFSET %s",
-                            args + [limit, offset])
+                cur.execute(f"""
+                    SELECT * FROM stories {w}
+                    ORDER BY
+                        -- Sync 100% (uploaded > 0 và uploaded >= downloaded) xuống cuối cùng
+                        CASE WHEN uploaded_chapters > 0 AND uploaded_chapters >= downloaded_chapters THEN 1 ELSE 0 END ASC,
+                        -- Thứ tự status
+                        CASE crawl_status
+                            WHEN 'crawling'  THEN 0
+                            WHEN 'repairing' THEN 1
+                            WHEN 'selected'  THEN 2
+                            WHEN 'paused'    THEN 3
+                            WHEN 'error'     THEN 4
+                            WHEN 'pending'   THEN 5
+                            WHEN 'completed' THEN 6
+                            ELSE 5
+                        END ASC,
+                        last_updated DESC
+                    LIMIT %s OFFSET %s
+                """, args + [limit, offset])
                 stories = [dict(r) for r in cur.fetchall()]
 
                 cur.execute(f"SELECT COUNT(*) AS total FROM stories {w}", args)
