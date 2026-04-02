@@ -461,14 +461,30 @@
             });
         }
 
-        async function loadStories() {
+        // ── HELPER: fetch có timeout 15s để không treo mãi ──────────────────
+        async function _fetchAPI(url, opts = {}) {
+            const timeoutMs = 15000;
+            const controller = new AbortController();
+            // Nếu đã có signal bên ngoài (AbortController của loadStories), link lại
+            if (opts.signal) {
+                opts.signal.addEventListener('abort', () => controller.abort());
+            }
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { ...opts, signal: controller.signal });
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        async function loadStories(signal) {
             try {
                 const search = document.getElementById('search').value;
                 const status = document.getElementById('status-filter').value;
                 const category = document.getElementById('category-filter').value;
                 const book_status = document.getElementById('book-status-filter').value;
                 const curAdmin = localStorage.getItem('admin_name');
-                const res = await fetch(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&admin=${curAdmin || ''}&source=${currentSource}`);
+                const res = await _fetchAPI(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&admin=${curAdmin || ''}&source=${currentSource}`, { signal });
                 
                 if (!res.ok) throw new Error(`Server Error: ${res.status} ${res.statusText}`);
                 
@@ -500,6 +516,30 @@
                 if (checkFilter) {
                     stories = stories.filter(s => checkCache[s.id] && checkCache[s.id].status === checkFilter);
                 }
+
+                // ── SẮP XẾP: Truyện hoạt động gần đây lên trên, completed xuống cuối ──
+                // Thứ tự ưu tiên: crawling > repairing > selected > paused > error > pending > completed
+                const STATUS_PRIORITY = {
+                    'crawling':  0,
+                    'repairing': 1,
+                    'selected':  2,
+                    'paused':    3,
+                    'error':     4,
+                    'pending':   5,
+                    'completed': 6,
+                };
+                stories = stories.slice().sort((a, b) => {
+                    // Thấy nhãn ✓ SYNC → đưa xuống cuối, không xét gì thêm
+                    const isSyncA = (a.uploaded_chapters||0) > 0 && Math.max(0, (a.downloaded_chapters||0) - (a.uploaded_chapters||0)) === 0;
+                    const isSyncB = (b.uploaded_chapters||0) > 0 && Math.max(0, (b.downloaded_chapters||0) - (b.uploaded_chapters||0)) === 0;
+                    if (isSyncA !== isSyncB) return isSyncA ? 1 : -1;
+
+                    const pa = STATUS_PRIORITY[a.crawl_status] ?? 5;
+                    const pb = STATUS_PRIORITY[b.crawl_status] ?? 5;
+                    if (pa !== pb) return pa - pb;
+                    // Cùng nhóm → id mới hơn lên trên
+                    return b.id - a.id;
+                });
 
                 list.innerHTML = '';
                 // data is now accessible here
@@ -1014,6 +1054,23 @@
         }
 
         let pauseAutoRefresh = false;
+
+        // ── FIX RACE CONDITION ────────────────────────────────────────────────
+        // Wrap loadStories: huỷ request cũ đang treo + chặn 2 request song song
+        // cũng pass AbortSignal vào fetch để backend không bị treo kết nối cũ
+        let _loadAbortCtrl = null;
+        let _loadBusy = false;
+        const _loadStoriesOrig = loadStories;
+        loadStories = async function() {
+            if (_loadAbortCtrl) { try { _loadAbortCtrl.abort(); } catch(_){} }
+            if (_loadBusy) return;
+            _loadBusy = true;
+            _loadAbortCtrl = new AbortController();
+            try { await _loadStoriesOrig(_loadAbortCtrl.signal); }
+            catch(e) { if (e && e.name !== 'AbortError') console.warn('[loadStories]', e); }
+            finally { _loadBusy = false; _loadAbortCtrl = null; }
+        };
+
         setInterval(() => { if (currentTab === 'stories' && !pauseAutoRefresh) loadStories(); }, 5000);
 
         // --- LOGIN & POOL LOGIC ---
