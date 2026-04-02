@@ -174,6 +174,24 @@ class handler(BaseHTTPRequestHandler):
                 else:
                     self._json({'story_id': None})
 
+            # ── agent status (heartbeat check) ──────────────────────────────
+            elif action == 'agent_status':
+                import datetime
+                cur.execute("SELECT value FROM agent_kv WHERE key='heartbeat'")
+                row = cur.fetchone()
+                if row:
+                    hb = json.loads(row['value'])
+                    ts_str = hb.get('ts', '2000-01-01T00:00:00')
+                    try:
+                        ts = datetime.datetime.fromisoformat(ts_str)
+                    except Exception:
+                        ts = datetime.datetime(2000, 1, 1)
+                    age = (datetime.datetime.utcnow() - ts).total_seconds()
+                    online = age < 60
+                    self._json({'online': online, 'running': hb.get('running', 0), 'age_seconds': int(age)})
+                else:
+                    self._json({'online': False, 'running': 0})
+
             else:
                 self._json({'error': f'unknown GET action: {action}'}, 400)
 
