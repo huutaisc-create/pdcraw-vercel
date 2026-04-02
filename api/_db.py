@@ -3,20 +3,20 @@ import psycopg2
 import psycopg2.extras
 from contextlib import contextmanager
 
-# Lấy link Neon từ cấu hình Environment Variables trên Vercel
-# Đảm bảo trên Vercel bạn đặt tên biến là NEON_DATABASE_URL
+# Lấy link kết nối từ Environment Variables trên Vercel Dashboard
+# Hãy đảm bảo bạn đã thêm biến NEON_DATABASE_URL trên Vercel
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL", "")
 
 @contextmanager
 def get_db_connection():
     """
-    Tạo kết nối an toàn tới Neon PostgreSQL.
-    Sử dụng 'with get_db_connection() as conn:' để tự động đóng kết nối.
+    Tạo kết nối tới PostgreSQL (Neon).
+    Sử dụng: with get_db_connection() as conn:
     """
     conn = None
     try:
         conn = psycopg2.connect(
-            DATABASE_URL, 
+            DATABASE_URL,
             cursor_factory=psycopg2.extras.RealDictCursor
         )
         yield conn
@@ -28,8 +28,8 @@ def get_db_connection():
             conn.close()
 
 def json_serial(obj):
-    """Xử lý định dạng ngày tháng khi trả về dữ liệu JSON."""
+    """Xử lý các kiểu dữ liệu ngày tháng khi chuyển sang JSON."""
     from datetime import datetime, date
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
-    raise TypeError(f"Type {type(obj)} không thể nén thành JSON")
+    raise TypeError(f"Kiểu dữ liệu {type(obj)} không hỗ trợ JSON")
