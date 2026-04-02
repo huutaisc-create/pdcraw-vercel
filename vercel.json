@@ -23,9 +23,5 @@
       "src": "/(.*)",
       "dest": "/api/index.py"
     }
-  ],
-  "env": {
-    "NEON_DATABASE_URL": "@neon_database_url",
-    "AGENT_SECRET": "@agent_secret"
-  }
+  ]
 }
