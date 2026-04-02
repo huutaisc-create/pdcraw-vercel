@@ -6,10 +6,19 @@ from http.server import BaseHTTPRequestHandler
 import json, os, urllib.parse
 from _db import get_conn, json_serial
 
-# Đọc HTML một lần khi cold-start
+# Lazy-load HTML để tránh crash khi cold-start nếu file chưa có
 _HTML_PATH = os.path.join(os.path.dirname(__file__), '..', 'static', 'index.html')
-with open(_HTML_PATH, encoding='utf-8') as _f:
-    HTML = _f.read()
+_HTML_CACHE = None
+
+def _get_html():
+    global _HTML_CACHE
+    if _HTML_CACHE is None:
+        try:
+            with open(_HTML_PATH, encoding='utf-8') as _f:
+                _HTML_CACHE = _f.read()
+        except FileNotFoundError:
+            _HTML_CACHE = '<h1>Admin UI not found</h1>'
+    return _HTML_CACHE
 
 
 class handler(BaseHTTPRequestHandler):
@@ -49,7 +58,7 @@ class handler(BaseHTTPRequestHandler):
 
         # Serve admin UI
         if path in ('/', ''):
-            body = HTML.encode()
+            body = _get_html().encode()
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self._cors()

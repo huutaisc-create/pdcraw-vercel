@@ -3,33 +3,34 @@ import psycopg2
 import psycopg2.extras
 from contextlib import contextmanager
 
-# Lấy link kết nối từ Environment Variables trên Vercel Dashboard
-# Hãy đảm bảo bạn đã thêm biến NEON_DATABASE_URL trên Vercel
-DATABASE_URL = os.environ.get("NEON_DATABASE_URL", "")
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://neondb_owner:npg_2x6udHZMytVl@ep-fragrant-hill-a1md82d2-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+)
+
+def get_conn():
+    """Trả về một psycopg2 connection với RealDictCursor."""
+    return psycopg2.connect(
+        DATABASE_URL,
+        cursor_factory=psycopg2.extras.RealDictCursor,
+        connect_timeout=10
+    )
 
 @contextmanager
 def get_db_connection():
-    """
-    Tạo kết nối tới PostgreSQL (Neon).
-    Sử dụng: with get_db_connection() as conn:
-    """
     conn = None
     try:
-        conn = psycopg2.connect(
-            DATABASE_URL,
-            cursor_factory=psycopg2.extras.RealDictCursor
-        )
+        conn = get_conn()
         yield conn
     except Exception as e:
-        print(f"Lỗi kết nối Database: {e}")
+        print(f"Lỗi kết nối Neon: {e}")
         raise
     finally:
         if conn:
             conn.close()
 
 def json_serial(obj):
-    """Xử lý các kiểu dữ liệu ngày tháng khi chuyển sang JSON."""
     from datetime import datetime, date
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
-    raise TypeError(f"Kiểu dữ liệu {type(obj)} không hỗ trợ JSON")
+    raise TypeError(f"Type {type(obj)} not serializable")
