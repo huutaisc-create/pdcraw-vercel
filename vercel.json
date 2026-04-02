@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/agent.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/agent(.*)",
+      "dest": "/api/agent.py"
+    },
+    {
+      "src": "/api(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.py"
+    }
+  ],
+  "env": {
+    "NEON_DATABASE_URL": "@neon_database_url",
+    "AGENT_SECRET": "@agent_secret"
+  }
+}
