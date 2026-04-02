@@ -133,6 +133,46 @@ def scan_story_dir(slug):
 
 # ── Command handlers ──────────────────────────────────────────────────────────
 
+def _wait_bot_claimed_story(acc_idx, timeout=120):
+    """
+    Đợi bot acc_idx claim được 1 truyện VÀ save ít nhất 1 chương.
+    Giống logic file cũ pd_manage_fast-v1.py dòng 1718-1734.
+    Trả về True nếu bot đã vào việc, False nếu timeout/stop.
+    """
+    scraper_dir = os.path.dirname(os.path.abspath(SCRAPER_PATH))
+    stop_file   = os.path.join(scraper_dir, 'stop.signal')
+    start_wait  = time.time()
+    target_story_id   = None
+    initial_chapters  = -1
+
+    print(f"  [~] Chờ Bot {acc_idx} claim truyện và lưu chương đầu...")
+    while time.time() - start_wait < timeout:
+        if os.path.exists(stop_file):
+            return False
+        try:
+            resp = _request('GET', f'/api?action=get_crawling_story&acc_idx={acc_idx}')
+            if not target_story_id:
+                sid = resp.get('story_id')
+                dc  = resp.get('downloaded_chapters', 0)
+                if sid:
+                    target_story_id  = sid
+                    initial_chapters = dc or 0
+                else:
+                    time.sleep(2); continue
+            else:
+                sid = resp.get('story_id')
+                dc  = resp.get('downloaded_chapters', 0)
+                status = resp.get('crawl_status', '')
+                if status != 'crawling' or (dc or 0) > initial_chapters:
+                    print(f"  [+] Bot {acc_idx} đã lưu chương đầu. Kích hoạt bot tiếp theo.")
+                    return True
+                time.sleep(3)
+        except Exception as e:
+            time.sleep(2)
+    print(f"  [!] Timeout chờ Bot {acc_idx} — tiếp tục mở bot kế tiếp.")
+    return True  # timeout nhưng vẫn cho bot tiếp theo chạy
+
+
 def handle_start_scraper(payload, cmd_id):
     global SCRAPER_PIDS
     admin         = payload.get('admin', CFG.get('admin_name'))
@@ -141,12 +181,15 @@ def handle_start_scraper(payload, cmd_id):
     source        = payload.get('source', 'PD')
     account_idxs  = account_idxs[:threads]
 
-    if os.path.exists('stop.signal'):
-        os.remove('stop.signal')
+    scraper_dir = os.path.dirname(os.path.abspath(SCRAPER_PATH))
+    stop_file = os.path.join(scraper_dir, 'stop.signal')
+    if os.path.exists(stop_file):
+        os.remove(stop_file)
 
     pids = []
-    for acc_idx in account_idxs:
-        time.sleep(2)  # stagger
+    for i, acc_idx in enumerate(account_idxs):
+        if os.path.exists(stop_file):
+            break
         try:
             proc = subprocess.Popen(
                 [sys.executable, SCRAPER_PATH, str(acc_idx), '--admin', admin],
@@ -156,6 +199,11 @@ def handle_start_scraper(payload, cmd_id):
             print(f"[+] Started scraper PID {proc.pid} (account {acc_idx})")
         except Exception as e:
             print(f"[!] Failed to start scraper for account {acc_idx}: {e}")
+            continue
+
+        # Nếu không phải bot cuối: đợi bot này claim + lưu chương đầu
+        if i < len(account_idxs) - 1:
+            _wait_bot_claimed_story(acc_idx)
 
     with PIDS_LOCK:
         SCRAPER_PIDS.extend(pids)
@@ -164,7 +212,9 @@ def handle_start_scraper(payload, cmd_id):
 
 def handle_kill_scrapers(payload, cmd_id):
     global SCRAPER_PIDS
-    with open('stop.signal', 'w') as f:
+    scraper_dir = os.path.dirname(os.path.abspath(SCRAPER_PATH))
+    stop_file = os.path.join(scraper_dir, 'stop.signal')
+    with open(stop_file, 'w') as f:
         f.write('STOP')
 
     with PIDS_LOCK:

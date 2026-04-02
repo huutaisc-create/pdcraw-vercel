@@ -158,25 +158,21 @@ class handler(BaseHTTPRequestHandler):
                     config = {'total_bots': 1, 'startup_delay': 60}
                 self._json({'success': True, 'config': config})
 
-            # ── agent status ─────────────────────────────────────────────
-            elif action == 'agent_status':
-                cur.execute("SELECT value FROM agent_kv WHERE key='heartbeat'")
-                row = cur.fetchone()
-                if row:
-                    hb = json.loads(row['value'])
-                    ts_str = hb.get('ts', '')
-                    try:
-                        from datetime import datetime, timezone
-                        ts = datetime.fromisoformat(ts_str)
-                        if ts.tzinfo is None:
-                            ts = ts.replace(tzinfo=timezone.utc)
-                        age = (datetime.now(timezone.utc) - ts).total_seconds()
-                        online = age < 60
-                    except:
-                        online = False
-                    self._json({'online': online, 'running': hb.get('running', 0), 'agent_id': hb.get('agent_id', ''), 'ts': ts_str})
+            # ── get crawling story by acc_idx (dùng để chờ bot claim) ────
+            elif action == 'get_crawling_story':
+                acc_idx = params.get('acc_idx', [None])[0]
+                if acc_idx is not None:
+                    cur.execute(
+                        "SELECT id, downloaded_chapters, crawl_status FROM stories WHERE last_account_idx=%s AND crawl_status='crawling' LIMIT 1",
+                        (int(acc_idx),)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        self._json({'story_id': row['id'], 'downloaded_chapters': row['downloaded_chapters'], 'crawl_status': row['crawl_status']})
+                    else:
+                        self._json({'story_id': None})
                 else:
-                    self._json({'online': False, 'running': 0})
+                    self._json({'story_id': None})
 
             else:
                 self._json({'error': f'unknown GET action: {action}'}, 400)
