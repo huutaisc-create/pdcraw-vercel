@@ -3,9 +3,12 @@ api/index.py — Entry point chính cho Vercel serverless.
 Phục vụ HTML admin UI tại / và điều phối các /api/* routes.
 """
 from http.server import BaseHTTPRequestHandler
-import json, os, urllib.parse
-import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+import json, os, urllib.parse, sys
+
+# Ensure the api/ directory is on the path so _db can be imported
+_API_DIR = os.path.dirname(os.path.abspath(__file__))
+if _API_DIR not in sys.path:
+    sys.path.insert(0, _API_DIR)
 from _db import get_conn, json_serial
 
 # Lazy-load HTML để tránh crash khi cold-start nếu file chưa có
