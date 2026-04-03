@@ -779,61 +779,86 @@
             }
         }
 
+        // Guard: chỉ 1 interval poll discovery tại 1 thời điểm
+        let _discoveryInterval = null;
+
         async function submitDiscovery() {
             const url = document.getElementById('discovery-url').value;
             const source = document.getElementById('discovery-source').value;
             const btn = document.getElementById('btn-discovery');
             const status = document.getElementById('discovery-status');
             const spinner = document.getElementById('discovery-spinner');
-            
+
+            // Nếu đang có interval chạy rồi thì không submit thêm
+            if (_discoveryInterval) {
+                status.innerText = "⚠ Đang quét, vui lòng chờ...";
+                return;
+            }
+
             btn.disabled = true; spinner.classList.remove('hidden');
             status.innerText = "Đang khởi động cào...";
-            
+
             try {
                 const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'submit_discovery', url: url, source: source})});
                 const data = await res.json();
-                if (data.success) {
+                if (data.success && data.command_id) {
                     status.innerText = "Scanner đang chạy... Vui lòng đợi...";
-                    pollDiscovery();
+                    pollDiscovery(data.command_id);
                 } else {
-                    alert("Lỗi khởi động!");
+                    alert("Lỗi khởi động: " + (data.message || 'unknown'));
                     resetDiscoveryUI();
                 }
             } catch(e) { resetDiscoveryUI(); }
         }
-        
-        async function pollDiscovery() {
+
+        async function pollDiscovery(commandId) {
             const status = document.getElementById('discovery-status');
-            const interval = setInterval(async () => {
+
+            // Clear interval cũ nếu có (phòng thủ)
+            if (_discoveryInterval) {
+                clearInterval(_discoveryInterval);
+                _discoveryInterval = null;
+            }
+
+            _discoveryInterval = setInterval(async () => {
                 try {
-                    const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'check_discovery'})});
+                    // Dùng GET get_command_result thay vì POST check_discovery
+                    // → không insert rác vào agent_commands
+                    const res = await fetch(`/api?action=get_command_result&command_id=${commandId}`);
                     const data = await res.json();
-                    
-                    if (data.status === 'finished') {
-                        clearInterval(interval);
+
+                    if (data.status === 'done') {
+                        clearInterval(_discoveryInterval);
+                        _discoveryInterval = null;
                         resetDiscoveryUI();
-                        
-                        // Handle Results
-                        const results = data.results || {new: 0, conflicts: []};
-                        status.innerText = `Hoàn tất. Thêm mới: ${results.new}. Trùng lặp: ${results.conflicts.length}`;
-                        
+
+                        const results = data.result || {new: 0, conflicts: []};
+                        status.innerText = `Hoàn tất. Thêm mới: ${results.new}. Trùng lặp: ${(results.conflicts||[]).length}`;
+
                         if (results.new > 0) {
                             alert(`✅ Đã thêm mới ${results.new} truyện!`);
                             loadStories();
                         }
-                        
-                        if (results.conflicts.length > 0) {
+                        if (results.conflicts && results.conflicts.length > 0) {
                             showConflicts(results.conflicts);
                         }
-                        
+
+                    } else if (data.status === 'error' || data.status === 'cancelled') {
+                        clearInterval(_discoveryInterval);
+                        _discoveryInterval = null;
+                        resetDiscoveryUI();
+                        status.innerText = `❌ Lỗi: ${(data.result && data.result.message) || data.status}`;
+
                     } else {
+                        // running hoặc pending
                         status.innerText = "Đang quét dữ liệu... (" + new Date().toLocaleTimeString() + ")";
                     }
                 } catch(e) {
-                    clearInterval(interval);
+                    clearInterval(_discoveryInterval);
+                    _discoveryInterval = null;
                     resetDiscoveryUI();
                 }
-            }, 2000);
+            }, 3000);
         }
         
         function resetDiscoveryUI() {

@@ -363,45 +363,68 @@ def handle_kill_scrapers(payload, cmd_id):
 def handle_submit_discovery(payload, cmd_id):
     url    = payload.get('url', '')
     source = payload.get('source', 'PD')
+    print(f"  [{_ts()}] DBG [submit_discovery] id={cmd_id}  url={url!r}  source={source}")
+    print(f"  [{_ts()}] DBG [submit_discovery] DISCOVERY_PATH={DISCOVERY_PATH}")
+    print(f"  [{_ts()}] DBG [submit_discovery] File tồn tại: {os.path.exists(DISCOVERY_PATH)}")
     try:
         bot_env = os.environ.copy()
         bot_env['SERVER_URL']      = VERCEL_URL
         bot_env['AGENT_SECRET']    = AGENT_SECRET
         bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
-        bot_env['ACCOUNTS_FILE']   = str(ACCOUNTS_FILE)  # ← FIX
+        bot_env['ACCOUNTS_FILE']   = str(ACCOUNTS_FILE)
 
         proc = subprocess.Popen(
             [sys.executable, DISCOVERY_PATH, '--url', url, '--source', source],
             creationflags=subprocess.CREATE_NEW_CONSOLE,
             env=bot_env
         )
-        # BUG 2 FIX: KHÔNG gọi action=done với status='running' ở đây nữa.
-        # poll đã tự set status='running' (atomic). Gọi thêm sẽ ghi đè result
-        # và làm _wait_discovery không thể phân biệt lần 1 / lần 2.
-        # Chỉ spawn thread chờ kết quả thật sự.
+        print(f"  [{_ts()}] DBG [submit_discovery] Spawn OK → PID={proc.pid}")
+
+        # BUG 2 FIX: poll đã set status='running' atomic rồi, không gọi thêm
         threading.Thread(target=_wait_discovery, args=(cmd_id, proc), daemon=True).start()
+        print(f"  [{_ts()}] DBG [submit_discovery] Thread _wait_discovery đã spawn")
     except Exception as e:
+        print(f"  [{_ts()}] DBG [submit_discovery] LỖI spawn: {e}")
         report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
 
 def _wait_discovery(cmd_id, proc):
     """Chờ discovery_conflicts.json rồi báo kết quả."""
-    # File được ghi tại cùng thư mục với local_agent.py
     result_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'discovery_conflicts.json')
-    print(f"  [~] Chờ kết quả discovery: {result_file}")
-    for _ in range(300):  # tối đa 10 phút
+    print(f"  [{_ts()}] DBG [wait_discovery] id={cmd_id}  chờ file: {result_file}")
+
+    # Xóa file cũ nếu còn sót từ lần chạy trước
+    if os.path.exists(result_file):
+        os.remove(result_file)
+        print(f"  [{_ts()}] DBG [wait_discovery] Đã xóa file cũ")
+
+    for i in range(300):  # tối đa 10 phút
         time.sleep(2)
+        alive = proc.poll() is None
+        if not alive and i % 5 == 0:
+            print(f"  [{_ts()}] DBG [wait_discovery] Process PID={proc.pid} đã thoát rc={proc.returncode}")
         if os.path.exists(result_file):
+            print(f"  [{_ts()}] DBG [wait_discovery] File xuất hiện sau {i*2}s → đọc...")
             try:
                 with open(result_file, encoding='utf-8') as f:
                     content = f.read().strip()
+                print(f"  [{_ts()}] DBG [wait_discovery] {len(content)} chars: {content[:200]}")
                 if content:
                     result = json.loads(content)
                     print(f"  [+] Discovery xong: new={result.get('new',0)} conflicts={len(result.get('conflicts',[]))}")
+                    print(f"  [{_ts()}] DBG [wait_discovery] Gửi report_done id={cmd_id}")
                     report_done(cmd_id, result)
+                    print(f"  [{_ts()}] DBG [wait_discovery] report_done XONG")
                     return
+                else:
+                    print(f"  [{_ts()}] DBG [wait_discovery] File rỗng → chờ tiếp")
             except Exception as e:
-                print(f"  [!] Đọc result_file lỗi: {e}")
-    print("  [!] Timeout chờ discovery_conflicts.json — báo kết quả rỗng.")
+                print(f"  [{_ts()}] DBG [wait_discovery] Lỗi đọc file: {e}")
+        else:
+            if i % 15 == 0:
+                print(f"  [{_ts()}] DBG [wait_discovery] Vẫn chờ... {i*2}s  proc_alive={alive}")
+
+    print(f"  [{_ts()}] DBG [wait_discovery] TIMEOUT → báo rỗng")
+    print(f"  [!] Timeout chờ discovery_conflicts.json — báo kết quả rỗng.")
     report_done(cmd_id, {'new': 0, 'conflicts': []})
 
 def handle_scan_updates(payload, cmd_id):
@@ -417,8 +440,11 @@ def handle_scan_updates(payload, cmd_id):
             creationflags=subprocess.CREATE_NEW_CONSOLE,
             env=bot_env
         )
-        # BUG 2 FIX: KHÔNG gọi action=done với status='running' ở đây.
-        # poll đã atomic set running rồi. Chỉ spawn thread chờ kết quả.
+        _request('POST', '/api/agent?action=done', {
+            'command_id': cmd_id,
+            'result': {'success': True, 'pid': proc.pid},
+            'status': 'running'
+        })
         threading.Thread(target=_wait_updates, args=(cmd_id, proc), daemon=True).start()
     except Exception as e:
         report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
@@ -647,15 +673,23 @@ HANDLERS = {
     'do_upload':           handle_do_upload,
 }
 
+# Các action này chỉ xử lý trên Vercel (đọc DB), không phải lệnh cho agent.
+# Nếu bị insert nhầm vào agent_commands (rác từ session cũ), auto-cancel luôn.
+STALE_ACTIONS = {'check_discovery', 'check_update_status'}
+
+def _ts():
+    """Timestamp ngắn cho debug log."""
+    return datetime.datetime.now().strftime('%H:%M:%S.%f')[:-3]
+
 def main():
     print(f"[*] PDCraw Local Agent khởi động")
     print(f"[*] Kết nối tới: {VERCEL_URL}")
     print(f"[*] Nhấn Ctrl+C để thoát\n")
 
-    hb_counter = 5 # Force fire immediately on first loop
+    hb_counter = 5  # Force fire immediately on first loop
     while True:
         try:
-            # Heartbeat m\u1ed7i 15s (5 x 3s)
+            # Heartbeat mỗi 15s (5 x 3s)
             hb_counter += 1
             if hb_counter >= 5:
                 with PIDS_LOCK:
@@ -663,41 +697,82 @@ def main():
                 heartbeat(running)
                 hb_counter = 0
 
-            # Poll lệnh
-            resp = poll_command()
-            if resp.get('has_command'):
-                cmd_id = resp['id']
-                action = resp['action']
-                payload= resp.get('payload', {})
+            # ── STEP 1: Poll lệnh ────────────────────────────────────────────
+            print(f"  [{_ts()}] DBG [1] Gửi poll → GET /api/agent?action=poll")
+            try:
+                resp = poll_command()
+            except Exception as poll_err:
+                print(f"  [{_ts()}] DBG [1] POLL LỖI MẠNG: {poll_err}")
+                time.sleep(3)
+                continue
+            print(f"  [{_ts()}] DBG [1] Poll response: {resp}")
 
-                # Bỏ qua nếu lệnh này đang được xử lý
-                with PROCESSING_LOCK:
-                    if cmd_id in PROCESSING_IDS:
-                        pass  # skip
-                    else:
-                        PROCESSING_IDS.add(cmd_id)
-                        print(f"[→] Nhận lệnh: {action} (id={cmd_id})")
-                        handler_fn = HANDLERS.get(action)
-                        if handler_fn:
-                            def _run(fn, p, cid):
-                                try:
-                                    fn(p, cid)
-                                finally:
-                                    with PROCESSING_LOCK:
-                                        PROCESSING_IDS.discard(cid)
-                            threading.Thread(
-                                target=_run,
-                                args=(handler_fn, payload, cmd_id),
-                                daemon=True
-                            ).start()
-                        else:
-                            PROCESSING_IDS.discard(cmd_id)
-                            report_done(cmd_id, {'success': False, 'message': f'Unknown action: {action}'}, 'error')
+            if not resp.get('has_command'):
+                print(f"  [{_ts()}] DBG [1] Không có lệnh pending → ngủ 3s")
+                time.sleep(3)
+                continue
+
+            # ── STEP 2: Parse lệnh ──────────────────────────────────────────
+            cmd_id  = resp['id']
+            action  = resp['action']
+            payload = resp.get('payload', {})
+            print(f"  [{_ts()}] DBG [2] Lệnh nhận được: id={cmd_id}  action={action}  payload={payload}")
+
+            # ── STEP 3: Auto-cancel lệnh rác (server-side only actions) ─────
+            if action in STALE_ACTIONS:
+                print(f"  [{_ts()}] DBG [3] action='{action}' là lệnh SERVER-SIDE, không phải cho agent.")
+                print(f"  [{_ts()}] DBG [3] → Auto-cancel id={cmd_id} (rác từ session cũ trong DB)")
+                report_done(cmd_id, {'success': False, 'message': f'Action {action!r} không phải lệnh agent, tự động huỷ.'}, 'cancelled')
+                print(f"  [{_ts()}] DBG [3] Đã cancel id={cmd_id}")
+                time.sleep(1)
+                continue
+
+            # ── STEP 4: Kiểm tra trùng PROCESSING_IDS ──────────────────────
+            with PROCESSING_LOCK:
+                print(f"  [{_ts()}] DBG [4] PROCESSING_IDS hiện tại: {PROCESSING_IDS}")
+                if cmd_id in PROCESSING_IDS:
+                    print(f"  [{_ts()}] DBG [4] id={cmd_id} ĐÃ CÓ trong PROCESSING_IDS → BỎ QUA (đang chạy)")
+                    time.sleep(3)
+                    continue
+
+                # ── STEP 5: Thêm vào set + tìm handler ─────────────────────
+                PROCESSING_IDS.add(cmd_id)
+                print(f"  [{_ts()}] DBG [5] Đã thêm id={cmd_id} vào PROCESSING_IDS")
+                print(f"[→] Nhận lệnh: {action} (id={cmd_id})")
+
+                handler_fn = HANDLERS.get(action)
+                if not handler_fn:
+                    print(f"  [{_ts()}] DBG [5] KHÔNG có handler cho action='{action}' → báo lỗi + cancel")
+                    PROCESSING_IDS.discard(cmd_id)
+                    report_done(cmd_id, {'success': False, 'message': f'Unknown action: {action}'}, 'error')
+                    time.sleep(1)
+                    continue
+
+                print(f"  [{_ts()}] DBG [5] Tìm thấy handler: {handler_fn.__name__} → spawn thread")
+
+            # ── STEP 6: Chạy handler trong thread ───────────────────────────
+            def _run(fn, p, cid):
+                print(f"  [{_ts()}] DBG [6] [thread] BẮT ĐẦU {fn.__name__}  id={cid}")
+                try:
+                    fn(p, cid)
+                    print(f"  [{_ts()}] DBG [6] [thread] XONG {fn.__name__}  id={cid}")
+                except Exception as ex:
+                    import traceback
+                    print(f"  [{_ts()}] DBG [6] [thread] LỖI {fn.__name__}  id={cid}: {ex}")
+                    print(traceback.format_exc())
+                finally:
+                    with PROCESSING_LOCK:
+                        PROCESSING_IDS.discard(cid)
+                    print(f"  [{_ts()}] DBG [6] [thread] id={cid} đã xóa khỏi PROCESSING_IDS")
+
+            threading.Thread(target=_run, args=(handler_fn, payload, cmd_id), daemon=True).start()
 
         except KeyboardInterrupt:
             print("\n[*] Agent dừng."); break
         except Exception as e:
-            print(f"[!] Lỗi poll: {e}")
+            import traceback
+            print(f"[!] Lỗi poll loop: {e}")
+            print(traceback.format_exc())
 
         time.sleep(3)
 
