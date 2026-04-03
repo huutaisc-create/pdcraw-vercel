@@ -280,24 +280,10 @@ class handler(BaseHTTPRequestHandler):
                 conn = get_conn(); cur = conn.cursor()
                 act_map = {'check_discovery': 'submit_discovery', 'check_update_status': 'scan_updates'}
                 source_action = act_map[action]
-
-                # BUG 3 FIX: ưu tiên command_id cụ thể từ UI.
-                # Trước đây lấy ORDER BY created_at DESC LIMIT 1 → lệnh mới nhất
-                # luôn là running → UI poll mãi không thấy finished.
-                cmd_id = data.get('command_id') or params.get('command_id', [None])[0]
-                if cmd_id:
-                    cur.execute("""
-                        SELECT status, result FROM agent_commands
-                        WHERE id = %s AND action = %s
-                    """, (int(cmd_id), source_action))
-                else:
-                    # fallback: lấy lệnh done gần nhất (không còn bị chặn bởi pending mới)
-                    cur.execute("""
-                        SELECT status, result FROM agent_commands
-                        WHERE action = %s AND status = 'done'
-                        ORDER BY created_at DESC LIMIT 1
-                    """, (source_action,))
-
+                cur.execute("""
+                    SELECT status, result FROM agent_commands
+                    WHERE action=%s ORDER BY created_at DESC LIMIT 1
+                """, (source_action,))
                 row = cur.fetchone()
                 conn.close()
                 if row and row['status'] == 'done':
@@ -313,7 +299,24 @@ class handler(BaseHTTPRequestHandler):
         try:
             conn = get_conn(); cur = conn.cursor()
 
-            if action == 'set_bot_config':
+            if action == 'cancel_all_pending':
+                # Xóa toàn bộ lệnh pending/running khỏi hàng đợi agent
+                target = data.get('action_filter')  # None = xóa tất cả
+                if target:
+                    cur.execute("""
+                        UPDATE agent_commands SET status='cancelled'
+                        WHERE status IN ('pending','running') AND action = %s
+                    """, (target,))
+                else:
+                    cur.execute("""
+                        UPDATE agent_commands SET status='cancelled'
+                        WHERE status IN ('pending','running')
+                    """)
+                count = cur.rowcount
+                conn.commit()
+                self._json({'success': True, 'cancelled': count})
+
+            elif action == 'set_bot_config':
                 total_bots    = data.get('total_bots', 1)
                 startup_delay = data.get('startup_delay', 60)
                 config = {'total_bots': int(total_bots), 'startup_delay': int(startup_delay)}
