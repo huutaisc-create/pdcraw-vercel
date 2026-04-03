@@ -2,3 +2,4 @@ Client-source/
 temp/
 __pycache__/
 *.pyc
+chrome_profile_discovery_auto/
