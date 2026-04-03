@@ -393,6 +393,47 @@ class handler(BaseHTTPRequestHandler):
                 conn.commit()
                 self._json({'success': True, 'updated': count})
 
+            elif action == 'insert_story':
+                # Insert truyện mới từ discovery (nếu slug đã tồn tại → báo conflict)
+                slug = data.get('slug', '').strip()
+                if not slug:
+                    self._json({'success': False, 'message': 'Missing slug'}); conn.close(); return
+                # Kiểm tra slug đã tồn tại chưa
+                cur.execute("SELECT id, source, chapters FROM stories WHERE slug = %s", (slug,))
+                existing = cur.fetchone()
+                if existing:
+                    self._json({
+                        'success': False,
+                        'conflict': True,
+                        'existing': {
+                            'id': existing['id'],
+                            'source': existing['source'],
+                            'chapters': existing['chapters'],
+                        }
+                    })
+                else:
+                    cur.execute("""
+                        INSERT INTO stories
+                            (slug, title, author, category, views, likes, chapters,
+                             book_status, cover_url, rating, url, source, crawl_status)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending')
+                    """, (
+                        slug,
+                        data.get('title', slug),
+                        data.get('author', 'N/A'),
+                        data.get('category', 'N/A'),
+                        str(data.get('views', '0')),
+                        str(data.get('likes', '0')),
+                        int(data.get('chapters', 0) or 0),
+                        data.get('book_status', 'Ongoing'),
+                        data.get('cover_url', ''),
+                        data.get('rating', 'N/A'),
+                        data.get('url', ''),
+                        data.get('source', 'PD'),
+                    ))
+                    conn.commit()
+                    self._json({'success': True, 'inserted': 1, 'slug': slug})
+
             elif action == 'reset_upload':
                 import urllib.request as _ureq
                 sid = data['story_id']; web_url = data.get('web_url','').rstrip('/'); secret = data.get('secret','')

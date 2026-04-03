@@ -57,13 +57,15 @@ def load_config():
 CFG = load_config()
 VERCEL_URL    = CFG['vercel_url'].rstrip('/')
 AGENT_SECRET  = CFG['agent_secret']
-IMPORT_DIR    = CFG['data_import_dir']
+
 def resolve_path(p):
+    """Resolve đường dẫn tương đối theo thư mục chứa local_agent.py."""
     if not p: return p
     if not os.path.isabs(p):
-        return os.path.abspath(os.path.join(os.path.dirname(__file__), p))
+        return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), p))
     return p
 
+IMPORT_DIR    = resolve_path(CFG['data_import_dir'])   # ← FIX: luôn resolve
 SCRAPER_PATH  = resolve_path(CFG['scraper_script'])
 DISCOVERY_PATH= resolve_path(CFG['discovery_script'])
 CHECK_UPDATE  = resolve_path(CFG['check_update_script'])
@@ -204,9 +206,10 @@ def handle_start_scraper(payload, cmd_id):
             break
         try:
             bot_env = os.environ.copy()
-            bot_env['SERVER_URL']   = VERCEL_URL
-            bot_env['AGENT_SECRET'] = AGENT_SECRET
+            bot_env['SERVER_URL']      = VERCEL_URL
+            bot_env['AGENT_SECRET']    = AGENT_SECRET
             bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
+            bot_env['ACCOUNTS_FILE']   = str(ACCOUNTS_FILE)  # ← FIX: truyền path accounts.txt
 
             proc = subprocess.Popen(
                 [sys.executable, SCRAPER_PATH, str(acc_idx), '--admin', admin],
@@ -347,9 +350,10 @@ def handle_submit_discovery(payload, cmd_id):
     source = payload.get('source', 'PD')
     try:
         bot_env = os.environ.copy()
-        bot_env['SERVER_URL']   = VERCEL_URL
-        bot_env['AGENT_SECRET'] = AGENT_SECRET
+        bot_env['SERVER_URL']      = VERCEL_URL
+        bot_env['AGENT_SECRET']    = AGENT_SECRET
         bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
+        bot_env['ACCOUNTS_FILE']   = str(ACCOUNTS_FILE)  # ← FIX
 
         proc = subprocess.Popen(
             [sys.executable, DISCOVERY_PATH, '--url', url, '--source', source],
@@ -369,24 +373,32 @@ def handle_submit_discovery(payload, cmd_id):
 
 def _wait_discovery(cmd_id, proc):
     """Chờ discovery_conflicts.json rồi báo kết quả."""
-    result_file = 'discovery_conflicts.json'
-    for _ in range(300):  # tối đa 5 phút
+    # File được ghi tại cùng thư mục với local_agent.py
+    result_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'discovery_conflicts.json')
+    print(f"  [~] Chờ kết quả discovery: {result_file}")
+    for _ in range(300):  # tối đa 10 phút
         time.sleep(2)
         if os.path.exists(result_file):
             try:
                 with open(result_file, encoding='utf-8') as f:
-                    result = json.load(f)
-                report_done(cmd_id, result)
-                return
-            except: pass
+                    content = f.read().strip()
+                if content:
+                    result = json.loads(content)
+                    print(f"  [+] Discovery xong: new={result.get('new',0)} conflicts={len(result.get('conflicts',[]))}")
+                    report_done(cmd_id, result)
+                    return
+            except Exception as e:
+                print(f"  [!] Đọc result_file lỗi: {e}")
+    print("  [!] Timeout chờ discovery_conflicts.json — báo kết quả rỗng.")
     report_done(cmd_id, {'new': 0, 'conflicts': []})
 
 def handle_scan_updates(payload, cmd_id):
     try:
         bot_env = os.environ.copy()
-        bot_env['SERVER_URL']   = VERCEL_URL
-        bot_env['AGENT_SECRET'] = AGENT_SECRET
+        bot_env['SERVER_URL']      = VERCEL_URL
+        bot_env['AGENT_SECRET']    = AGENT_SECRET
         bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
+        bot_env['ACCOUNTS_FILE']   = str(ACCOUNTS_FILE)  # ← FIX
 
         proc = subprocess.Popen(
             [sys.executable, CHECK_UPDATE],

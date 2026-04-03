@@ -1,0 +1,1 @@
+var serviceWorker=self,scriptsUsedByRootSW=["./ping.js","../background.bundle.js","./firstSearchNotificationBackground.js"];scriptsUsedByRootSW.forEach((function(o){try{self.importScripts(o)}catch(o){console.log(o)}}));
