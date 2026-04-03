@@ -203,9 +203,14 @@ def handle_start_scraper(payload, cmd_id):
         if os.path.exists(stop_file):
             break
         try:
+            bot_env = os.environ.copy()
+            bot_env['SERVER_URL']   = VERCEL_URL
+            bot_env['AGENT_SECRET'] = AGENT_SECRET
+
             proc = subprocess.Popen(
                 [sys.executable, SCRAPER_PATH, str(acc_idx), '--admin', admin],
-                creationflags=subprocess.CREATE_NEW_CONSOLE
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                env=bot_env
             )
             pids.append(proc.pid)
             print(f"[+] Started scraper PID {proc.pid} (account {acc_idx})")
@@ -350,9 +355,14 @@ def handle_submit_discovery(payload, cmd_id):
     url    = payload.get('url', '')
     source = payload.get('source', 'PD')
     try:
+        bot_env = os.environ.copy()
+        bot_env['SERVER_URL']   = VERCEL_URL
+        bot_env['AGENT_SECRET'] = AGENT_SECRET
+
         proc = subprocess.Popen(
             [sys.executable, DISCOVERY_PATH, '--url', url, '--source', source],
-            creationflags=subprocess.CREATE_NEW_CONSOLE
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            env=bot_env
         )
         # Đánh dấu command là running, không done ngay
         _request('POST', '/api/agent?action=done', {
@@ -381,9 +391,14 @@ def _wait_discovery(cmd_id, proc):
 
 def handle_scan_updates(payload, cmd_id):
     try:
+        bot_env = os.environ.copy()
+        bot_env['SERVER_URL']   = VERCEL_URL
+        bot_env['AGENT_SECRET'] = AGENT_SECRET
+
         proc = subprocess.Popen(
             [sys.executable, CHECK_UPDATE],
-            creationflags=subprocess.CREATE_NEW_CONSOLE
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            env=bot_env
         )
         _request('POST', '/api/agent?action=done', {
             'command_id': cmd_id,
