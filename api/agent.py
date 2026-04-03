@@ -187,13 +187,22 @@ class handler(BaseHTTPRequestHandler):
 
             # Lấy danh sách stories cần scrape (agent dùng khi claim task)
             elif action == 'claim_story':
-                acc_idx    = data.get('account_index', -1)
-                admin_name = data.get('admin_name')
+                acc_idx       = data.get('account_index', -1)
+                admin_name    = data.get('admin_name')
+                source_filter = data.get('source_filter')  # 'PD' | 'WIKI' | None
+
                 admin_filter = "AND (admin_control IS NULL OR admin_control = '')"
                 f_args = []
                 if admin_name:
                     admin_filter = "AND (admin_control = %s OR admin_control IS NULL OR admin_control = '')"
                     f_args = [admin_name]
+
+                # Lọc source: PD scraper chỉ nhận PD, Wiki scraper chỉ nhận WIKI
+                source_clause = ""
+                if source_filter == 'WIKI':
+                    source_clause = "AND source = 'WIKI'"
+                elif source_filter == 'PD':
+                    source_clause = "AND (source = 'PD' OR source IS NULL OR source = '')"
 
                 cur.execute(f"""
                     SELECT id, slug, title, url, downloaded_chapters, chapters, crawl_status
@@ -203,6 +212,7 @@ class handler(BaseHTTPRequestHandler):
                         OR (crawl_status = 'selected' AND (last_account_idx = %s OR last_account_idx IS NULL OR last_account_idx = -1))
                         OR (crawl_status = 'crawling' AND (last_account_idx = %s OR last_updated < NOW() - INTERVAL '5 minutes'))
                     )
+                    {source_clause}
                     {admin_filter}
                     ORDER BY
                         CASE WHEN crawl_status='repairing' THEN 0

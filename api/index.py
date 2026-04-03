@@ -229,6 +229,14 @@ class handler(BaseHTTPRequestHandler):
         data   = self._body()
         action = data.get('action')
 
+        # Auth check cho các action từ internal scripts (discovery, agent...)
+        # Các action từ browser UI không cần secret (không có header này)
+        AGENT_ONLY_ACTIONS = {'insert_story'}
+        if action in AGENT_ONLY_ACTIONS:
+            _secret = os.environ.get('AGENT_SECRET', 'changeme')
+            if self.headers.get('X-Agent-Secret', '') != _secret:
+                self._json({'error': 'Unauthorized'}, 401); return
+
         # Delegate heavy/local actions to agent command queue
         LOCAL_ACTIONS = {
             'start_scraper', 'kill_scrapers',

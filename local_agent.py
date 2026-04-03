@@ -34,14 +34,16 @@ import datetime
 
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'agent_config.json')
 DEFAULT_CONFIG = {
-    "vercel_url":         "https://your-app.vercel.app",
-    "agent_secret":       "changeme",
-    "admin_name":         "Admin",
-    "data_import_dir":    "D:\\Webtruyen\\pdcraw\\data_import",
-    "scraper_script":     "D:\\Webtruyen\\pdcraw\\pd_scraper_fast-v1.py",
-    "discovery_script":   "D:\\Webtruyen\\pdcraw\\pd_discovery_auto.py",
-    "check_update_script":"D:\\Webtruyen\\pdcraw\\check_update.py",
-    "accounts_file":      "D:\\Webtruyen\\pdcraw\\accounts.txt",
+    "vercel_url":           "https://your-app.vercel.app",
+    "agent_secret":         "changeme",
+    "admin_name":           "Admin",
+    "data_import_dir":      "D:\\Webtruyen\\pdcraw\\data_import",
+    "scraper_script":       "D:\\Webtruyen\\pdcraw\\pd_scraper_fast-v1.py",
+    "wiki_scraper_script":  "D:\\Webtruyen\\pdcraw\\wiki_scraper_agent.py",
+    "discovery_script":     "D:\\Webtruyen\\pdcraw\\pd_discovery_auto.py",
+    "check_update_script":  "D:\\Webtruyen\\pdcraw\\check_update.py",
+    "accounts_file":        "D:\\Webtruyen\\pdcraw\\accounts.txt",
+    "wiki_accounts_file":   "D:\\Webtruyen\\pdcraw\\userpass-wiki.txt",
 }
 
 def load_config():
@@ -65,11 +67,13 @@ def resolve_path(p):
         return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), p))
     return p
 
-IMPORT_DIR    = resolve_path(CFG['data_import_dir'])   # ← FIX: luôn resolve
-SCRAPER_PATH  = resolve_path(CFG['scraper_script'])
-DISCOVERY_PATH= resolve_path(CFG['discovery_script'])
-CHECK_UPDATE  = resolve_path(CFG['check_update_script'])
-ACCOUNTS_FILE = resolve_path(CFG['accounts_file'])
+IMPORT_DIR         = resolve_path(CFG['data_import_dir'])
+SCRAPER_PATH       = resolve_path(CFG['scraper_script'])
+WIKI_SCRAPER_PATH  = resolve_path(CFG.get('wiki_scraper_script', ''))   # ← mới
+DISCOVERY_PATH     = resolve_path(CFG['discovery_script'])
+CHECK_UPDATE       = resolve_path(CFG['check_update_script'])
+ACCOUNTS_FILE      = resolve_path(CFG['accounts_file'])
+WIKI_ACCOUNTS_FILE = resolve_path(CFG.get('wiki_accounts_file', ''))    # ← mới
 
 HEADERS = {'X-Agent-Secret': AGENT_SECRET, 'Content-Type': 'application/json'}
 
@@ -192,11 +196,21 @@ def handle_start_scraper(payload, cmd_id):
     admin         = payload.get('admin', CFG.get('admin_name'))
     account_idxs  = payload.get('accounts', [])
     threads       = int(payload.get('threads', len(account_idxs)))
-    source        = payload.get('source', 'PD')
+    source        = payload.get('source', 'PD').upper()   # 'PD' hoặc 'WIKI'
     account_idxs  = account_idxs[:threads]
 
-    scraper_dir = os.path.dirname(os.path.abspath(SCRAPER_PATH))
-    stop_file = os.path.join(scraper_dir, 'stop.signal')
+    # Chọn đúng script theo source
+    if source == 'WIKI':
+        script_path = WIKI_SCRAPER_PATH
+        if not script_path or not os.path.exists(script_path):
+            report_done(cmd_id, {'success': False,
+                'message': f'wiki_scraper_script chưa cấu hình hoặc không tồn tại: {script_path}'}, 'error')
+            return
+    else:
+        script_path = SCRAPER_PATH
+
+    scraper_dir = os.path.dirname(os.path.abspath(script_path))
+    stop_file   = os.path.join(scraper_dir, 'stop.signal')
     if os.path.exists(stop_file):
         os.remove(stop_file)
 
@@ -206,20 +220,21 @@ def handle_start_scraper(payload, cmd_id):
             break
         try:
             bot_env = os.environ.copy()
-            bot_env['SERVER_URL']      = VERCEL_URL
-            bot_env['AGENT_SECRET']    = AGENT_SECRET
-            bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
-            bot_env['ACCOUNTS_FILE']   = str(ACCOUNTS_FILE)  # ← FIX: truyền path accounts.txt
+            bot_env['SERVER_URL']          = VERCEL_URL
+            bot_env['AGENT_SECRET']        = AGENT_SECRET
+            bot_env['DATA_IMPORT_DIR']     = str(IMPORT_DIR)
+            bot_env['ACCOUNTS_FILE']       = str(ACCOUNTS_FILE)
+            bot_env['WIKI_ACCOUNTS_FILE']  = str(WIKI_ACCOUNTS_FILE)  # ← truyền cho wiki
 
             proc = subprocess.Popen(
-                [sys.executable, SCRAPER_PATH, str(acc_idx), '--admin', admin],
+                [sys.executable, script_path, str(acc_idx), '--admin', admin],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
                 env=bot_env
             )
             pids.append(proc.pid)
-            print(f"[+] Started scraper PID {proc.pid} (account {acc_idx})")
+            print(f"[+] Started {source} scraper PID {proc.pid} (account {acc_idx})")
         except Exception as e:
-            print(f"[!] Failed to start scraper for account {acc_idx}: {e}")
+            print(f"[!] Failed to start {source} scraper for account {acc_idx}: {e}")
             continue
 
         # Nếu không phải bot cuối: đợi bot này claim + lưu chương đầu
@@ -270,7 +285,7 @@ def handle_kill_scrapers(payload, cmd_id):
     # 3. Kill tất cả python process đang chạy các script cào
     #    Thu thập tên tất cả script cần kill
     scripts_to_kill = set()
-    for spath in [SCRAPER_PATH, DISCOVERY_PATH, CHECK_UPDATE]:
+    for spath in [SCRAPER_PATH, WIKI_SCRAPER_PATH, DISCOVERY_PATH, CHECK_UPDATE]:
         if spath:
             scripts_to_kill.add(os.path.basename(spath))
     print(f"[!] Scripts to kill: {scripts_to_kill}")
