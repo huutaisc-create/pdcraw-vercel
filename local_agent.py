@@ -206,6 +206,7 @@ def handle_start_scraper(payload, cmd_id):
             bot_env = os.environ.copy()
             bot_env['SERVER_URL']   = VERCEL_URL
             bot_env['AGENT_SECRET'] = AGENT_SECRET
+            bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
 
             proc = subprocess.Popen(
                 [sys.executable, SCRAPER_PATH, str(acc_idx), '--admin', admin],
@@ -348,6 +349,7 @@ def handle_submit_discovery(payload, cmd_id):
         bot_env = os.environ.copy()
         bot_env['SERVER_URL']   = VERCEL_URL
         bot_env['AGENT_SECRET'] = AGENT_SECRET
+        bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
 
         proc = subprocess.Popen(
             [sys.executable, DISCOVERY_PATH, '--url', url, '--source', source],
@@ -384,6 +386,7 @@ def handle_scan_updates(payload, cmd_id):
         bot_env = os.environ.copy()
         bot_env['SERVER_URL']   = VERCEL_URL
         bot_env['AGENT_SECRET'] = AGENT_SECRET
+        bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
 
         proc = subprocess.Popen(
             [sys.executable, CHECK_UPDATE],
