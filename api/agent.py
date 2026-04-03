@@ -59,13 +59,21 @@ class handler(BaseHTTPRequestHandler):
             try:
                 get_conn, _ = _import_db()
                 conn = get_conn(); cur = conn.cursor()
+                # BUG 1 FIX: atomic claim — UPDATE + RETURNING để tránh race condition
+                # poll nhiều lần sẽ không bao giờ lấy cùng 1 lệnh hai lần
                 cur.execute("""
-                    SELECT id, action, payload FROM agent_commands
-                    WHERE status = 'pending'
-                    ORDER BY created_at ASC
-                    LIMIT 1
+                    UPDATE agent_commands SET status = 'running'
+                    WHERE id = (
+                        SELECT id FROM agent_commands
+                        WHERE status = 'pending'
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    RETURNING id, action, payload
                 """)
                 row = cur.fetchone()
+                conn.commit()
                 conn.close()
                 if row:
                     self._json({

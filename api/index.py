@@ -280,10 +280,24 @@ class handler(BaseHTTPRequestHandler):
                 conn = get_conn(); cur = conn.cursor()
                 act_map = {'check_discovery': 'submit_discovery', 'check_update_status': 'scan_updates'}
                 source_action = act_map[action]
-                cur.execute("""
-                    SELECT status, result FROM agent_commands
-                    WHERE action=%s ORDER BY created_at DESC LIMIT 1
-                """, (source_action,))
+
+                # BUG 3 FIX: ưu tiên command_id cụ thể từ UI.
+                # Trước đây lấy ORDER BY created_at DESC LIMIT 1 → lệnh mới nhất
+                # luôn là running → UI poll mãi không thấy finished.
+                cmd_id = data.get('command_id') or params.get('command_id', [None])[0]
+                if cmd_id:
+                    cur.execute("""
+                        SELECT status, result FROM agent_commands
+                        WHERE id = %s AND action = %s
+                    """, (int(cmd_id), source_action))
+                else:
+                    # fallback: lấy lệnh done gần nhất (không còn bị chặn bởi pending mới)
+                    cur.execute("""
+                        SELECT status, result FROM agent_commands
+                        WHERE action = %s AND status = 'done'
+                        ORDER BY created_at DESC LIMIT 1
+                    """, (source_action,))
+
                 row = cur.fetchone()
                 conn.close()
                 if row and row['status'] == 'done':

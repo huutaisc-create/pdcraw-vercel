@@ -375,13 +375,10 @@ def handle_submit_discovery(payload, cmd_id):
             creationflags=subprocess.CREATE_NEW_CONSOLE,
             env=bot_env
         )
-        # Đánh dấu command là running, không done ngay
-        _request('POST', '/api/agent?action=done', {
-            'command_id': cmd_id,
-            'result': {'success': True, 'pid': proc.pid},
-            'status': 'running'
-        })
-        # Poll kết quả discovery
+        # BUG 2 FIX: KHÔNG gọi action=done với status='running' ở đây nữa.
+        # poll đã tự set status='running' (atomic). Gọi thêm sẽ ghi đè result
+        # và làm _wait_discovery không thể phân biệt lần 1 / lần 2.
+        # Chỉ spawn thread chờ kết quả thật sự.
         threading.Thread(target=_wait_discovery, args=(cmd_id, proc), daemon=True).start()
     except Exception as e:
         report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
@@ -420,11 +417,8 @@ def handle_scan_updates(payload, cmd_id):
             creationflags=subprocess.CREATE_NEW_CONSOLE,
             env=bot_env
         )
-        _request('POST', '/api/agent?action=done', {
-            'command_id': cmd_id,
-            'result': {'success': True, 'pid': proc.pid},
-            'status': 'running'
-        })
+        # BUG 2 FIX: KHÔNG gọi action=done với status='running' ở đây.
+        # poll đã atomic set running rồi. Chỉ spawn thread chờ kết quả.
         threading.Thread(target=_wait_updates, args=(cmd_id, proc), daemon=True).start()
     except Exception as e:
         report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
