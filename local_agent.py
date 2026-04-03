@@ -79,6 +79,12 @@ PIDS_LOCK    = threading.Lock()
 PROCESSING_IDS = set()
 PROCESSING_LOCK = threading.Lock()
 
+# Kill cooldown: tránh chạy nhiều kill cùng lúc
+KILL_LOCK    = threading.Lock()
+KILL_RUNNING = False
+LAST_KILL_TS = 0.0   # timestamp lần kill gần nhất
+KILL_COOLDOWN = 60   # giây: bỏ qua kill nếu đã kill trong vòng N giây
+
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 def _request(method, path, body=None, timeout=30):
@@ -217,10 +223,23 @@ def handle_start_scraper(payload, cmd_id):
     report_done(cmd_id, {'success': True, 'started': len(pids), 'pids': pids})
 
 def handle_kill_scrapers(payload, cmd_id):
-    global SCRAPER_PIDS
+    global SCRAPER_PIDS, KILL_RUNNING, LAST_KILL_TS
     killed = []
 
-    # 1. Ghi stop.signal để scraper tự thoát
+    # Guard: nếu đang kill hoặc vừa kill xong < COOLDOWN giây, bỏ qua
+    with KILL_LOCK:
+        now = time.time()
+        if KILL_RUNNING:
+            print(f"[!] Kill skipped (another kill in progress) cmd_id={cmd_id}")
+            report_done(cmd_id, {'success': True, 'killed': 0, 'note': 'skipped: kill already running'}, 'done')
+            return
+        if now - LAST_KILL_TS < KILL_COOLDOWN:
+            elapsed = int(now - LAST_KILL_TS)
+            print(f"[!] Kill skipped (cooldown {elapsed}s/{KILL_COOLDOWN}s) cmd_id={cmd_id}")
+            report_done(cmd_id, {'success': True, 'killed': 0, 'note': f'skipped: cooldown {elapsed}s'}, 'done')
+            return
+        KILL_RUNNING = True
+
     try:
         scraper_dir = os.path.dirname(os.path.abspath(SCRAPER_PATH))
         stop_file = os.path.join(scraper_dir, 'stop.signal')
@@ -230,14 +249,14 @@ def handle_kill_scrapers(payload, cmd_id):
     except Exception as e:
         print(f"[!] Could not write stop.signal: {e}")
 
-    # 2. Kill các PID đã lưu (start qua Web)
-    with PIDS_LOCK:
-        all_pids = list(set(SCRAPER_PIDS))
-    for pid in all_pids:
-        try:
-            subprocess.run(f"taskkill /PID {pid} /F /T", shell=True, capture_output=True)
-            killed.append(pid)
-        except: pass
+        # 2. Kill các PID đã lưu (start qua Web)
+        with PIDS_LOCK:
+            all_pids = list(set(SCRAPER_PIDS))
+        for pid in all_pids:
+            try:
+                subprocess.run(f"taskkill /PID {pid} /F /T", shell=True, capture_output=True)
+                killed.append(pid)
+            except: pass
 
     # 3. Kill tất cả python process đang chạy các script cào
     #    Thu thập tên tất cả script cần kill
