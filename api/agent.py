@@ -200,7 +200,7 @@ class handler(BaseHTTPRequestHandler):
                     FROM stories
                     WHERE (
                         crawl_status = 'repairing'
-                        OR (crawl_status = 'selected' AND (last_account_idx = %s OR last_account_idx IS NULL))
+                        OR (crawl_status = 'selected' AND (last_account_idx = %s OR last_account_idx IS NULL OR last_account_idx = -1))
                         OR (crawl_status = 'crawling' AND (last_account_idx = %s OR last_updated < NOW() - INTERVAL '5 minutes'))
                     )
                     {admin_filter}
@@ -208,10 +208,11 @@ class handler(BaseHTTPRequestHandler):
                         CASE WHEN crawl_status='repairing' THEN 0
                              WHEN crawl_status='crawling' AND last_account_idx=%s THEN 1
                              WHEN crawl_status='selected' AND last_account_idx=%s THEN 2
-                             WHEN crawl_status='selected' THEN 3
+                             WHEN crawl_status='selected' AND (last_account_idx IS NULL OR last_account_idx = -1) THEN 3
                              ELSE 4 END,
                         last_updated ASC
                     LIMIT 1
+                    FOR UPDATE SKIP LOCKED
                 """, [acc_idx, acc_idx] + f_args + [acc_idx, acc_idx])
 
                 story = cur.fetchone()
