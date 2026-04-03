@@ -3,8 +3,8 @@
   "agent_secret": "changeme",
   "admin_name": "Admin",
   "data_import_dir": "D:\\Webtruyen\\pdcraw\\data_import",
-  "scraper_script": "D:\\Webtruyen\\pdcraw\\pd_scraper_fast-v1.py",
-  "discovery_script": "D:\\Webtruyen\\pdcraw\\pd_discovery_auto.py",
-  "check_update_script": "D:\\Webtruyen\\pdcraw\\check_update.py",
-  "accounts_file": "D:\\Webtruyen\\pdcraw\\accounts.txt"
-}
+  "scraper_script": "D:\\Webtruyen\\pdcraw\\pdcraw-vercel\\pdcraw-vercel\\client-source\\pd_scraper_fast-v1.py",
+  "discovery_script": "D:\\Webtruyen\\pdcraw\\pdcraw-vercel\\pdcraw-vercel\\client-source\\pd_discovery_auto.py",
+  "check_update_script": "D:\\Webtruyen\\pdcraw\\pdcraw-vercel\\pdcraw-vercel\\client-source\\check_update.py",
+  "accounts_file": "D:\\Webtruyen\\pdcraw\\pdcraw-vercel\\pdcraw-vercel\\client-source\\accounts.txt"
+}
