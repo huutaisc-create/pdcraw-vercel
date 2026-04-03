@@ -218,27 +218,108 @@ def handle_start_scraper(payload, cmd_id):
 
 def handle_kill_scrapers(payload, cmd_id):
     global SCRAPER_PIDS
-    scraper_dir = os.path.dirname(os.path.abspath(SCRAPER_PATH))
-    stop_file = os.path.join(scraper_dir, 'stop.signal')
-    with open(stop_file, 'w') as f:
-        f.write('STOP')
+    killed = []
 
+    # 1. Ghi stop.signal để scraper tự thoát
+    try:
+        scraper_dir = os.path.dirname(os.path.abspath(SCRAPER_PATH))
+        stop_file = os.path.join(scraper_dir, 'stop.signal')
+        with open(stop_file, 'w') as f:
+            f.write('STOP')
+        print(f"[!] Wrote stop.signal to {stop_file}")
+    except Exception as e:
+        print(f"[!] Could not write stop.signal: {e}")
+
+    # 2. Kill các PID đã lưu (start qua Web)
     with PIDS_LOCK:
         all_pids = list(set(SCRAPER_PIDS))
-
     for pid in all_pids:
         try:
             subprocess.run(f"taskkill /PID {pid} /F /T", shell=True, capture_output=True)
+            killed.append(pid)
         except: pass
 
+    # 3. Kill tất cả python process đang chạy các script cào
+    #    Thu thập tên tất cả script cần kill
+    scripts_to_kill = set()
+    for spath in [SCRAPER_PATH, DISCOVERY_PATH, CHECK_UPDATE]:
+        if spath:
+            scripts_to_kill.add(os.path.basename(spath))
+    print(f"[!] Scripts to kill: {scripts_to_kill}")
+
+    # Thử WMIC trước (Win10), fallback sang tasklist /V (Win11)
+    wmic_ok = False
+    try:
+        r_w = subprocess.run(
+            'wmic process where "name=\'python.exe\'" get ProcessId,CommandLine /value',
+            shell=True, capture_output=True, text=True, timeout=6
+        )
+        if 'ProcessId=' in r_w.stdout:
+            wmic_ok = True
+            block = {}
+            for line in r_w.stdout.splitlines():
+                line = line.strip()
+                if line.startswith('CommandLine='):
+                    block['cmd'] = line[len('CommandLine='):]
+                elif line.startswith('ProcessId='):
+                    v = line[len('ProcessId='):].strip()
+                    if v.isdigit():
+                        block['pid'] = int(v)
+                elif line == '' and block.get('pid'):
+                    pid_val = block['pid']
+                    cmd_val = block.get('cmd', '')
+                    if pid_val != os.getpid():
+                        for sname in scripts_to_kill:
+                            if sname in cmd_val:
+                                subprocess.run(f"taskkill /PID {pid_val} /F /T", shell=True, capture_output=True)
+                                killed.append(pid_val)
+                                print(f"  [kill-wmic] PID {pid_val} ({sname})")
+                                break
+                    block = {}
+    except Exception as e:
+        print(f"[!] WMIC unavailable: {e}")
+
+    # Fallback: dùng tasklist /V để lấy window title (chứa tên script)
+    if not wmic_ok:
+        try:
+            r_t = subprocess.run(
+                'tasklist /FO CSV /V /FI "IMAGENAME eq python.exe"',
+                shell=True, capture_output=True, text=True
+            )
+            for line in r_t.stdout.splitlines():
+                for sname in scripts_to_kill:
+                    if sname in line:
+                        parts = line.strip().strip('"').split('","')
+                        if len(parts) >= 2:
+                            try:
+                                pid_val = int(parts[1])
+                                if pid_val != os.getpid():
+                                    subprocess.run(f"taskkill /PID {pid_val} /F /T", shell=True, capture_output=True)
+                                    killed.append(pid_val)
+                                    print(f"  [kill-tasklist] PID {pid_val} ({sname})")
+                            except: pass
+        except Exception as e:
+            print(f"[!] tasklist kill error: {e}")
+
+    # 4. Luôn kill chromedriver (liên quan scraping)
     try:
         subprocess.run("taskkill /F /IM chromedriver.exe /T", shell=True, capture_output=True)
+        print("  [kill] chromedriver.exe")
     except: pass
+
+    # 4b. Kill chrome.exe nếu payload yêu cầu (mặc định True để tương thích cũ)
+    if payload.get('kill_chrome', True):
+        try:
+            subprocess.run("taskkill /F /IM chrome.exe /T", shell=True, capture_output=True)
+            print("  [kill] chrome.exe")
+        except: pass
 
     with PIDS_LOCK:
         SCRAPER_PIDS = []
 
-    report_done(cmd_id, {'success': True, 'killed': len(all_pids)})
+    print(f"[!] Kill done. PIDs killed: {killed}")
+    report_done(cmd_id, {'success': True, 'killed': len(killed), 'pids': killed})
+
 
 def handle_submit_discovery(payload, cmd_id):
     url    = payload.get('url', '')

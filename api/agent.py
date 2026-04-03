@@ -78,6 +78,33 @@ class handler(BaseHTTPRequestHandler):
                     self._json({'has_command': False})
             except Exception as e:
                 self._json({'error': str(e)}, 500)
+
+        elif action == 'poll_result':
+            # Ki\u1ec3m tra k\u1ebft qu\u1ea3 1 l\u1ec7nh theo command_id
+            cmd_id = params.get('command_id', [None])[0]
+            if not cmd_id:
+                self._json({'error': 'Missing command_id'}, 400); return
+            try:
+                get_conn, _ = _import_db()
+                conn = get_conn(); cur = conn.cursor()
+                cur.execute("""
+                    SELECT id, action, status, result, created_at, finished_at
+                    FROM agent_commands WHERE id = %s
+                """, (int(cmd_id),))
+                row = cur.fetchone()
+                conn.close()
+                if row:
+                    self._json({
+                        'id': row['id'],
+                        'action': row['action'],
+                        'status': row['status'],
+                        'result': json.loads(row['result']) if row['result'] else None,
+                    })
+                else:
+                    self._json({'error': 'Command not found'}, 404)
+            except Exception as e:
+                self._json({'error': str(e)}, 500)
+
         else:
             self._json({'error': 'unknown action'}, 400)
 

@@ -192,6 +192,27 @@ class handler(BaseHTTPRequestHandler):
                 else:
                     self._json({'online': False, 'running': 0})
 
+            # ── get command result (frontend poll) ────────────────────────────────
+            elif action == 'get_command_result':
+                cmd_id = params.get('command_id', [None])[0]
+                if not cmd_id or not cmd_id.isdigit():
+                    self._json({'error': 'Missing or invalid command_id'}, 400)
+                else:
+                    cur.execute(
+                        "SELECT id, action, status, result FROM agent_commands WHERE id = %s",
+                        (int(cmd_id),)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        self._json({
+                            'id': row['id'],
+                            'action': row['action'],
+                            'status': row['status'],
+                            'result': json.loads(row['result']) if row['result'] else None,
+                        })
+                    else:
+                        self._json({'error': 'Not found'}, 404)
+
             else:
                 self._json({'error': f'unknown GET action: {action}'}, 400)
 
