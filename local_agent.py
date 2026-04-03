@@ -337,6 +337,12 @@ def handle_kill_scrapers(payload, cmd_id):
         SCRAPER_PIDS = []
 
     print(f"[!] Kill done. PIDs killed: {killed}")
+
+    # Reset tr\u1ea1ng th\u00e1i c\u1ee7a kill
+    with KILL_LOCK:
+        LAST_KILL_TS = time.time()
+        KILL_RUNNING = False
+
     report_done(cmd_id, {'success': True, 'killed': len(killed), 'pids': killed})
 
 
