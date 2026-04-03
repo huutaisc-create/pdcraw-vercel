@@ -244,21 +244,15 @@ class handler(BaseHTTPRequestHandler):
                 conn = get_conn(); cur = conn.cursor()
                 import datetime
 
-                # --- Dedup kill_scrapers: trả về ID cũ nếu đang có pending ---
+                # N\u1ebfu g\u1eedi STOP kh\u1ea9n c\u1ea5p, h\u1ee7y b\u1ecf T\u1ea4T C\u1ea2 c\u00e1c l\u1ec7nh k\u1eb9t c\u0169 d\u1ecdn s\u1ea1ch b\u00e0n 
                 if action == 'kill_scrapers':
                     cur.execute("""
-                        SELECT id FROM agent_commands
-                        WHERE action = 'kill_scrapers' AND status = 'pending'
-                        ORDER BY id DESC LIMIT 1
+                        UPDATE agent_commands 
+                        SET status = 'cancelled', 
+                            result = '{"note":"M\\u00e1y ch\\u1ee7 \\u0111\\u00e3 hu\\u1ef7 b\\u1ecf do l\\u1ec7nh STOP KH\\u1ea8N C\\u1ea4P"}' 
+                        WHERE status = 'pending'
                     """)
-                    existing = cur.fetchone()
-                    if existing:
-                        conn.close()
-                        self._json({'success': True, 'queued': True,
-                                    'command_id': existing['id'],
-                                    'message': 'Lệnh kill đã có trong hàng đợi (dedup).'})
-                        return
-
+                    
                 cur.execute("""
                     INSERT INTO agent_commands (action, payload, status, created_at)
                     VALUES (%s, %s, 'pending', %s)
