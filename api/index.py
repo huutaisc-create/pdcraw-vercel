@@ -134,7 +134,7 @@ class handler(BaseHTTPRequestHandler):
 
             # ── accounts ────────────────────────────────────────────────────
             elif action == 'get_accounts':
-                accounts_path = os.path.join(os.path.dirname(__file__), '..', 'accounts.txt')
+                accounts_path = os.path.join(os.path.dirname(__file__), '..', 'client-source', 'accounts.txt')
                 try:
                     with open(accounts_path, encoding='utf-8') as f:
                         raw = [l.strip() for l in f if '|' in l and not l.strip().startswith('#')]
@@ -329,7 +329,7 @@ class handler(BaseHTTPRequestHandler):
             elif action == 'lock_account_pool':
                 admin = data['admin']; indexes = data.get('indexes', [])
                 cur.execute("UPDATE scraper_accounts_status SET locked_by=NULL WHERE locked_by=%s", (admin,))
-                accounts_path = os.path.join(os.path.dirname(__file__), '..', 'accounts.txt')
+                accounts_path = os.path.join(os.path.dirname(__file__), '..', 'client-source', 'accounts.txt')
                 try:
                     with open(accounts_path, encoding='utf-8') as f:
                         raw = [l.strip() for l in f if '|' in l and not l.strip().startswith('#')]
