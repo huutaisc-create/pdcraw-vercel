@@ -325,18 +325,8 @@ def handle_kill_scrapers(payload, cmd_id):
         except Exception as e:
             print(f"[!] tasklist kill error: {e}")
 
-    # 4. Luôn kill chromedriver (liên quan scraping)
-    try:
-        subprocess.run("taskkill /F /IM chromedriver.exe /T", shell=True, capture_output=True)
-        print("  [kill] chromedriver.exe")
-    except: pass
-
-    # 4b. Kill chrome.exe nếu payload yêu cầu (mặc định True để tương thích cũ)
-    if payload.get('kill_chrome', True):
-        try:
-            subprocess.run("taskkill /F /IM chrome.exe /T", shell=True, capture_output=True)
-            print("  [kill] chrome.exe")
-        except: pass
+    # 4. Chrome v\u00e0 ChromeDriver s\u1ebd t\u1ef1 \u0111\u1ed9ng ch\u1ebft do l\u1ec7nh Taskkill /PID ... /T \u1edf tr\u00ean \u0111\u00e3 ti\u00eau di\u1ec7t "c\u1ea3 c\u00e2y gia ph\u1ea3" c\u1ee7a ti\u1ebfn tr\u00ecnh \u0111\u00f3.
+    # Tuy\u1ec7t \u0111\u1ed1i kh\u00f4ng qu\u00e9t global chrome.exe t\u1edbi t\u1ea5t c\u1ea3 user kh\u00e1c tr\u00ean h\u1ec7 \u0111i\u1ec1u h\u00e0nh.
 
     with PIDS_LOCK:
         SCRAPER_PIDS = []
