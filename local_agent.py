@@ -58,10 +58,16 @@ CFG = load_config()
 VERCEL_URL    = CFG['vercel_url'].rstrip('/')
 AGENT_SECRET  = CFG['agent_secret']
 IMPORT_DIR    = CFG['data_import_dir']
-SCRAPER_PATH  = CFG['scraper_script']
-DISCOVERY_PATH= CFG['discovery_script']
-CHECK_UPDATE  = CFG['check_update_script']
-ACCOUNTS_FILE = CFG['accounts_file']
+def resolve_path(p):
+    if not p: return p
+    if not os.path.isabs(p):
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), p))
+    return p
+
+SCRAPER_PATH  = resolve_path(CFG['scraper_script'])
+DISCOVERY_PATH= resolve_path(CFG['discovery_script'])
+CHECK_UPDATE  = resolve_path(CFG['check_update_script'])
+ACCOUNTS_FILE = resolve_path(CFG['accounts_file'])
 
 HEADERS = {'X-Agent-Secret': AGENT_SECRET, 'Content-Type': 'application/json'}
 
