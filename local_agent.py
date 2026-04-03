@@ -628,12 +628,12 @@ def main():
     print(f"[*] Kết nối tới: {VERCEL_URL}")
     print(f"[*] Nhấn Ctrl+C để thoát\n")
 
-    hb_counter = 0
+    hb_counter = 5 # Force fire immediately on first loop
     while True:
         try:
-            # Heartbeat mỗi 30s
+            # Heartbeat m\u1ed7i 15s (5 x 3s)
             hb_counter += 1
-            if hb_counter >= 10:
+            if hb_counter >= 5:
                 with PIDS_LOCK:
                     running = len(SCRAPER_PIDS)
                 heartbeat(running)
