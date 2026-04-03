@@ -132,6 +132,9 @@
                             <button onclick="resetBot()" class="bg-slate-600 hover:bg-slate-500 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🤖</span><span>RESET BOT</span>
                             </button>
+                            <button onclick="resetCrawlingAll()" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg shadow-cyan-500/20 transition-all active:scale-95 flex items-center gap-1.5 border border-cyan-400">
+                                <span>🛠️</span><span>GIẢI CỨU KẸT TRUYỆN</span>
+                            </button>
                             <button onclick="deleteMenuMap()" class="bg-rose-800 hover:bg-rose-700 text-white font-bold py-1.5 px-4 rounded text-xs shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🗑</span><span>XÓA MENU MAP</span>
                             </button>
@@ -1140,6 +1143,21 @@
                 const data = await res.json();
                 if (data.success) {
                     showToast(`✅ Đã ghi lệnh xóa ${ids.length} truyện vào hàng đợi. Chạy delete_menu_map.py để thực hiện!`, 'green');
+                } else {
+                    showToast('❌ ' + data.message, 'red');
+                }
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
+        }
+
+        async function resetCrawlingAll() {
+            if (!confirm(`RESET tất cả các truyện đang kẹt ở trạng thái CRAWLING / REPAIRING về SELECTED?\nChỉ dùng khi các Bot trước đó lỡ tắt đột ngột và bị kẹt mốc thời gian lấy truyện!`)) return;
+
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'reset_crawling_all' }) });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ Đã giải phóng hoàn tất ${data.affected} truyện đang mắc kẹt!`, 'green');
+                    loadStories();
                 } else {
                     showToast('❌ ' + data.message, 'red');
                 }

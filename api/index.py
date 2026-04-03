@@ -305,6 +305,11 @@ class handler(BaseHTTPRequestHandler):
                 conn.commit()
                 self._json({'success': True, 'message': f'Updated {len(ids)} stories.'})
 
+            elif action == 'reset_crawling_all':
+                cur.execute("UPDATE stories SET crawl_status='selected', last_account_idx=NULL WHERE crawl_status IN ('crawling', 'repairing')")
+                conn.commit()
+                self._json({'success': True, 'affected': cur.rowcount})
+
             elif action == 'get_slugs_by_ids':
                 ids = data.get('ids', [])
                 if ids:
