@@ -240,8 +240,8 @@ class handler(BaseHTTPRequestHandler):
         # Delegate heavy/local actions to agent command queue
         LOCAL_ACTIONS = {
             'start_scraper', 'kill_scrapers',
-            'submit_discovery', 'check_discovery',
-            'scan_updates', 'check_update_status',
+            'submit_discovery',
+            'scan_updates',
             'do_upload', 'check_upload_content',
             'sync_progress', 'sync_selected',
             'delete_menu_map',
@@ -270,6 +270,27 @@ class handler(BaseHTTPRequestHandler):
                 conn.commit(); conn.close()
                 self._json({'success': True, 'queued': True, 'command_id': cmd_id,
                             'message': f'Lệnh {action} đã gửi tới local agent.'})
+            except Exception as e:
+                self._json({'success': False, 'message': str(e)}, 500)
+            return
+
+        # ── Status-check actions (POST nhưng chỉ đọc DB, không queue) ──────────
+        if action in ('check_discovery', 'check_update_status'):
+            try:
+                conn = get_conn(); cur = conn.cursor()
+                act_map = {'check_discovery': 'submit_discovery', 'check_update_status': 'scan_updates'}
+                source_action = act_map[action]
+                cur.execute("""
+                    SELECT status, result FROM agent_commands
+                    WHERE action=%s ORDER BY created_at DESC LIMIT 1
+                """, (source_action,))
+                row = cur.fetchone()
+                conn.close()
+                if row and row['status'] == 'done':
+                    result = json.loads(row['result']) if row['result'] else {}
+                    self._json({'status': 'finished', 'results': result})
+                else:
+                    self._json({'status': 'running'})
             except Exception as e:
                 self._json({'success': False, 'message': str(e)}, 500)
             return
