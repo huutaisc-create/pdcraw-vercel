@@ -211,8 +211,16 @@ def handle_start_scraper(payload, cmd_id):
 
     scraper_dir = os.path.dirname(os.path.abspath(script_path))
     stop_file   = os.path.join(scraper_dir, 'stop.signal')
+    lock_file   = os.path.join(scraper_dir, 'startup.lock')
     if os.path.exists(stop_file):
         os.remove(stop_file)
+    # Giải phóng startup lock cũ (có thể còn kẹt từ lần chạy trước) trước khi launch bot
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+            print(f"[*] Đã xóa startup.lock cũ trước khi khởi động bot.")
+        except Exception as e:
+            print(f"[!] Không xóa được startup.lock: {e}")
 
     pids = []
     for i, acc_idx in enumerate(account_idxs):
@@ -225,11 +233,13 @@ def handle_start_scraper(payload, cmd_id):
             bot_env['DATA_IMPORT_DIR']     = str(IMPORT_DIR)
             bot_env['ACCOUNTS_FILE']       = str(ACCOUNTS_FILE)
             bot_env['WIKI_ACCOUNTS_FILE']  = str(WIKI_ACCOUNTS_FILE)  # ← truyền cho wiki
-            # Chia đều accounts cho từng bot — bot i lấy các index i, i+N, i+2N,...
-            # Ví dụ: 4 accounts, 2 bots → bot0=[0,2], bot1=[1,3]
-            n_bots = len(account_idxs)
-            bot_assigned = [account_idxs[j] for j in range(i, len(account_idxs), n_bots)]
-            bot_env['BOT_ASSIGNED_ACCOUNTS'] = ','.join(str(x) for x in bot_assigned)
+            if source != 'WIKI':
+                # PD scraper: chia đều accounts cho từng bot — bot i lấy các index i, i+N, i+2N,...
+                n_bots = len(account_idxs)
+                bot_assigned = [account_idxs[j] for j in range(i, len(account_idxs), n_bots)]
+                bot_env['BOT_ASSIGNED_ACCOUNTS'] = ','.join(str(x) for x in bot_assigned)
+            # WIKI scraper: không set BOT_ASSIGNED_ACCOUNTS → bot load toàn bộ account pool
+            # acc_idx truyền qua argument đã đủ để bot bắt đầu ở account khác nhau
 
             proc = subprocess.Popen(
                 [sys.executable, script_path, str(acc_idx), '--admin', admin],
