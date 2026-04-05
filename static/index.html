@@ -199,8 +199,8 @@
 
         <div id="view-accounts" class="hidden">
              <div class="glass p-6 rounded-2xl">
-                <h3 class="text-xs font-black uppercase text-orange-500 mb-4 tracking-widest">Danh sách tài khoản (accounts.txt)</h3>
-                <p class="text-[10px] text-slate-400 mb-4">File: accounts.txt</p>
+                <h3 class="text-xs font-black uppercase text-orange-500 mb-4 tracking-widest">Danh sách tài khoản (<span id="accounts-source-label">accounts.txt</span>)</h3>
+                <p class="text-[10px] text-slate-400 mb-4">File: <span id="accounts-file-label">accounts.txt</span></p>
                 <div class="bg-slate-900 p-4 rounded font-mono text-xs text-slate-300 whitespace-pre-line" id="account-content">
                     Loading...
                 </div>
@@ -465,6 +465,8 @@
             if (catSel) catSel.value = '';
             loadCategories();
             loadStories();
+            // Reload accounts nếu đang ở tab TÀI KHOẢN
+            if (currentTab === 'accounts') loadAccounts();
         }
 
         function switchTab(tab) {
@@ -719,6 +721,13 @@
             const list = document.getElementById('account-content');
             list.innerHTML = '<div class="text-center text-slate-500 italic">Checking Account Pool...</div>'; // clear previous content
             list.className = "flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-2"; // Remove previous classes if needed, or override
+
+            // Cập nhật label tiêu đề theo source
+            const srcFile = currentSource === 'WIKI' ? 'userpass-wiki.txt' : 'accounts.txt';
+            const srcLabel = document.getElementById('accounts-source-label');
+            const fileLabel = document.getElementById('accounts-file-label');
+            if (srcLabel) srcLabel.innerText = srcFile;
+            if (fileLabel) fileLabel.innerText = srcFile;
 
             const res = await fetch(`/api?action=get_accounts&source=${currentSource}`);
             const data = await res.json();
@@ -1305,20 +1314,20 @@
             if(!admin) return alert("Bạn chưa đăng nhập!");
             
             const raw = document.getElementById('pool-input').value;
-            const parts = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 0);
+            const parts = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
             
             const msg = parts.length === 0 
                 ? "Bạn có chắc muốn TRẢ HẾT account đang giữ?" 
-                : `[${currentSource}] Giành quyền quản lý ${parts.length} tài khoản?\n(index: ${parts.join(', ')})`;
+                : `Bạn muốn giành quyền quản lý ${parts.length} tài khoản này?\n(${parts.join(', ')})`;
                 
             if(!confirm(msg)) return;
             
             try {
                 const res = await fetch('/api', {method: 'POST', body: JSON.stringify({
-                    action: 'lock_account_pool', 
+                    action: 'lock_account_pool',
                     admin: admin,
                     indexes: parts,
-                    source: currentSource   // ← truyền source để server đọc đúng file
+                    source: currentSource
                 })});
                 const data = await res.json();
                 if(data.success) {
