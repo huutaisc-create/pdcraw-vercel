@@ -37,8 +37,12 @@ CREATE TABLE IF NOT EXISTS scraper_accounts_status (
     account_email  VARCHAR(255) PRIMARY KEY,
     account_index  INTEGER,
     locked_by      VARCHAR(100),
+    source         VARCHAR(50)  DEFAULT 'PD',
     last_heartbeat TIMESTAMPTZ  DEFAULT NOW()
 );
+
+-- Migration: thêm column source nếu bảng đã tồn tại
+ALTER TABLE scraper_accounts_status ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'PD';
 
 -- Bảng hàng đợi lệnh gửi tới local agent
 CREATE TABLE IF NOT EXISTS agent_commands (
