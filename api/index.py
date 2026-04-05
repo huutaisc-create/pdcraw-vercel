@@ -134,16 +134,26 @@ class handler(BaseHTTPRequestHandler):
 
             # ── accounts ────────────────────────────────────────────────────
             elif action == 'get_accounts':
-                accounts_path = os.path.join(os.path.dirname(__file__), '..', 'accounts.txt')
+                # Chọn file account theo source (PD hoặc WIKI)
+                source_param = params.get('source', ['PD'])[0].upper()
+                if source_param == 'WIKI':
+                    accounts_path = os.path.join(os.path.dirname(__file__), '..', 'userpass-wiki.txt')
+                    lock_key = 'wiki'
+                else:
+                    accounts_path = os.path.join(os.path.dirname(__file__), '..', 'accounts.txt')
+                    lock_key = 'pd'
                 try:
                     with open(accounts_path, encoding='utf-8') as f:
-                        raw = [l.strip() for l in f if '|' in l and not l.strip().startswith('#')]
+                        raw = [l.strip() for l in f if l.strip() and not l.strip().startswith('#')]
+                        # Chấp nhận cả format "user|pass" và "user" (pass mặc định)
+                        raw = [l for l in raw if l]
                 except:
                     raw = []
-                cur.execute("SELECT account_email, locked_by FROM scraper_accounts_status")
+                lock_table_key = f'accounts_{lock_key}'
+                cur.execute("SELECT account_email, locked_by FROM scraper_accounts_status WHERE source = %s", (source_param,))
                 lock_map = {r['account_email']: r['locked_by'] for r in cur.fetchall()}
                 accounts = [
-                    {'index': i+1, 'email': line.split('|')[0], 'locked_by': lock_map.get(line.split('|')[0])}
+                    {'index': i, 'email': line.split('|')[0], 'locked_by': lock_map.get(line.split('|')[0])}
                     for i, line in enumerate(raw)
                 ]
                 self._json({'accounts': accounts})
@@ -409,23 +419,34 @@ class handler(BaseHTTPRequestHandler):
                 self._json({'success': True, 'stories': [dict(r) for r in cur.fetchall()]})
 
             elif action == 'lock_account_pool':
-                admin = data['admin']; indexes = data.get('indexes', [])
-                cur.execute("UPDATE scraper_accounts_status SET locked_by=NULL WHERE locked_by=%s", (admin,))
-                accounts_path = os.path.join(os.path.dirname(__file__), '..', 'accounts.txt')
+                admin  = data['admin']
+                indexes = data.get('indexes', [])
+                source_param = data.get('source', 'PD').upper()
+
+                # Chỉ unlock account cùng source của admin này
+                cur.execute("UPDATE scraper_accounts_status SET locked_by=NULL WHERE locked_by=%s AND source=%s", (admin, source_param))
+
+                # Đọc đúng file theo source
+                if source_param == 'WIKI':
+                    accounts_path = os.path.join(os.path.dirname(__file__), '..', 'userpass-wiki.txt')
+                else:
+                    accounts_path = os.path.join(os.path.dirname(__file__), '..', 'accounts.txt')
                 try:
                     with open(accounts_path, encoding='utf-8') as f:
-                        raw = [l.strip() for l in f if '|' in l and not l.strip().startswith('#')]
+                        raw = [l.strip() for l in f if l.strip() and not l.strip().startswith('#')]
                 except: raw = []
+
                 for idx in indexes:
-                    if 1 <= idx <= len(raw):
-                        email = raw[idx-1].split('|')[0]
+                    if 0 <= idx < len(raw):
+                        email = raw[idx].split('|')[0]
                         cur.execute("""
-                            INSERT INTO scraper_accounts_status (account_email, account_index, locked_by)
-                            VALUES (%s, %s, %s)
-                            ON CONFLICT (account_email) DO UPDATE SET locked_by=EXCLUDED.locked_by
-                        """, (email, idx, admin))
+                            INSERT INTO scraper_accounts_status (account_email, account_index, locked_by, source)
+                            VALUES (%s, %s, %s, %s)
+                            ON CONFLICT (account_email) DO UPDATE
+                                SET locked_by=EXCLUDED.locked_by, source=EXCLUDED.source
+                        """, (email, idx, admin, source_param))
                 conn.commit()
-                self._json({'success': True, 'message': f'Locked {len(indexes)} accounts for {admin}.'})
+                self._json({'success': True, 'message': f'Locked {len(indexes)} accounts ({source_param}) for {admin}.'})
 
             elif action == 'resolve_conflicts':
                 updates = data.get('updates', []); count = 0

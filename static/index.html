@@ -720,7 +720,7 @@
             list.innerHTML = '<div class="text-center text-slate-500 italic">Checking Account Pool...</div>'; // clear previous content
             list.className = "flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-2"; // Remove previous classes if needed, or override
 
-            const res = await fetch('/api?action=get_accounts');
+            const res = await fetch(`/api?action=get_accounts&source=${currentSource}`);
             const data = await res.json();
             
             list.innerHTML = '';
@@ -927,8 +927,8 @@
             const admin = localStorage.getItem('admin_name');
             if(!admin) { document.getElementById('modal-login').classList.remove('hidden'); return; }
             
-            // Get my locked accounts
-            const res = await fetch('/api?action=get_accounts');
+            // Get my locked accounts (đúng source đang chọn)
+            const res = await fetch(`/api?action=get_accounts&source=${currentSource}`);
             const data = await res.json();
             // Assuming data.accounts array exists
             const myAccounts = (data.accounts || []).filter(a => a.locked_by === admin).map(a => a.index);
@@ -1305,11 +1305,11 @@
             if(!admin) return alert("Bạn chưa đăng nhập!");
             
             const raw = document.getElementById('pool-input').value;
-            const parts = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
+            const parts = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 0);
             
             const msg = parts.length === 0 
                 ? "Bạn có chắc muốn TRẢ HẾT account đang giữ?" 
-                : `Bạn muốn giành quyền quản lý ${parts.length} tài khoản này?\n(${parts.join(', ')})`;
+                : `[${currentSource}] Giành quyền quản lý ${parts.length} tài khoản?\n(index: ${parts.join(', ')})`;
                 
             if(!confirm(msg)) return;
             
@@ -1317,7 +1317,8 @@
                 const res = await fetch('/api', {method: 'POST', body: JSON.stringify({
                     action: 'lock_account_pool', 
                     admin: admin,
-                    indexes: parts
+                    indexes: parts,
+                    source: currentSource   // ← truyền source để server đọc đúng file
                 })});
                 const data = await res.json();
                 if(data.success) {
