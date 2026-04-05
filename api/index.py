@@ -168,6 +168,13 @@ class handler(BaseHTTPRequestHandler):
                     config = {'total_bots': 1, 'startup_delay': 60}
                 self._json({'success': True, 'config': config})
 
+            # ── machine labels ───────────────────────────────────────────────
+            elif action == 'get_machine_labels':
+                cur.execute("SELECT value FROM agent_kv WHERE key='machine_labels'")
+                row = cur.fetchone()
+                labels = json.loads(row['value']) if row else ['A', 'B', 'C', 'D']
+                self._json({'labels': labels})
+
             # ── get crawling story by acc_idx (dùng để chờ bot claim) ────
             elif action == 'get_crawling_story':
                 acc_idx = params.get('acc_idx', [None])[0]
@@ -255,6 +262,7 @@ class handler(BaseHTTPRequestHandler):
             'do_upload', 'check_upload_content',
             'sync_progress', 'sync_selected',
             'delete_menu_map',
+            'open_folder',   # ← thêm vào
         }
 
         if action in LOCAL_ACTIONS:
@@ -337,6 +345,15 @@ class handler(BaseHTTPRequestHandler):
                 """, (json.dumps(config, ensure_ascii=False),))
                 conn.commit()
                 self._json({'success': True, 'config': config})
+
+            elif action == 'set_machine_labels':
+                labels = data.get('labels', ['A', 'B', 'C', 'D'])
+                cur.execute("""
+                    INSERT INTO agent_kv(key, value) VALUES('machine_labels', %s)
+                    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value
+                """, (json.dumps(labels, ensure_ascii=False),))
+                conn.commit()
+                self._json({'success': True, 'labels': labels})
 
             elif action == 'toggle_select':
                 sid = data['id']; is_sel = data['selected']; admin = data.get('admin')
@@ -447,6 +464,17 @@ class handler(BaseHTTPRequestHandler):
                         """, (email, idx, admin, source_param))
                 conn.commit()
                 self._json({'success': True, 'message': f'Locked {len(indexes)} accounts ({source_param}) for {admin}.'})
+
+            elif action == 'change_storage_label':
+                ids   = data.get('ids', [])
+                label = data.get('label')  # None = xóa gán (set NULL)
+                if ids:
+                    cur.execute(
+                        "UPDATE stories SET storage_label=%s, last_updated=NOW() WHERE id = ANY(%s)",
+                        (label, ids)
+                    )
+                    conn.commit()
+                self._json({'success': True, 'updated': len(ids)})
 
             elif action == 'batch_check_slugs':
                 slugs = data.get('slugs', [])

@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
     "vercel_url":           "https://your-app.vercel.app",
     "agent_secret":         "changeme",
     "admin_name":           "Admin",
+    "machine_label":        "",
     "data_import_dir":      "D:\\Webtruyen\\pdcraw\\data_import",
     "scraper_script":       "D:\\Webtruyen\\pdcraw\\pd_scraper_fast-v1.py",
     "wiki_scraper_script":  "D:\\Webtruyen\\pdcraw\\wiki_scraper_agent.py",
@@ -74,6 +75,7 @@ DISCOVERY_PATH     = resolve_path(CFG['discovery_script'])
 CHECK_UPDATE       = resolve_path(CFG['check_update_script'])
 ACCOUNTS_FILE      = resolve_path(CFG['accounts_file'])
 WIKI_ACCOUNTS_FILE = resolve_path(CFG.get('wiki_accounts_file', ''))    # ← mới
+MACHINE_LABEL = CFG.get('machine_label', '')   # Nhãn máy này: 'A', 'B', 'C'...
 
 HEADERS = {'X-Agent-Secret': AGENT_SECRET, 'Content-Type': 'application/json'}
 
@@ -209,9 +211,10 @@ def handle_start_scraper(payload, cmd_id):
     else:
         script_path = SCRAPER_PATH
 
-    scraper_dir = os.path.dirname(os.path.abspath(script_path))
-    stop_file   = os.path.join(scraper_dir, 'stop.signal')
-    lock_file   = os.path.join(scraper_dir, 'startup.lock')
+    scraper_dir    = os.path.dirname(os.path.abspath(script_path))
+    stop_file      = os.path.join(scraper_dir, 'stop.signal')
+    lock_file      = os.path.join(scraper_dir, 'startup.lock')
+    depleted_file  = os.path.join(scraper_dir, 'wiki_depleted.json')
     if os.path.exists(stop_file):
         os.remove(stop_file)
     # Giải phóng startup lock cũ (có thể còn kẹt từ lần chạy trước) trước khi launch bot
@@ -221,6 +224,13 @@ def handle_start_scraper(payload, cmd_id):
             print(f"[*] Đã xóa startup.lock cũ trước khi khởi động bot.")
         except Exception as e:
             print(f"[!] Không xóa được startup.lock: {e}")
+    # Xóa depleted list cũ khi bắt đầu session WIKI mới (user chủ động nhấn start)
+    if source == 'WIKI' and os.path.exists(depleted_file):
+        try:
+            os.remove(depleted_file)
+            print(f"[*] Đã xóa wiki_depleted.json — session mới, reset quota tracking.")
+        except Exception as e:
+            print(f"[!] Không xóa được wiki_depleted.json: {e}")
 
     pids = []
     for i, acc_idx in enumerate(account_idxs):
@@ -233,6 +243,7 @@ def handle_start_scraper(payload, cmd_id):
             bot_env['DATA_IMPORT_DIR']     = str(IMPORT_DIR)
             bot_env['ACCOUNTS_FILE']       = str(ACCOUNTS_FILE)
             bot_env['WIKI_ACCOUNTS_FILE']  = str(WIKI_ACCOUNTS_FILE)  # ← truyền cho wiki
+            bot_env['MACHINE_LABEL'] = MACHINE_LABEL   # truyền nhãn máy cho scraper
             if source != 'WIKI':
                 # PD scraper: chia đều accounts cho từng bot — bot i lấy các index i, i+N, i+2N,...
                 n_bots = len(account_idxs)
@@ -260,6 +271,23 @@ def handle_start_scraper(payload, cmd_id):
         SCRAPER_PIDS.extend(pids)
 
     report_done(cmd_id, {'success': True, 'started': len(pids), 'pids': pids})
+
+def handle_open_folder(payload, cmd_id):
+    """Mở thư mục truyện trong Windows Explorer."""
+    slug = payload.get('slug', '').strip()
+    if not slug:
+        report_done(cmd_id, {'success': False, 'message': 'Thiếu slug'}, 'error')
+        return
+    folder = os.path.join(IMPORT_DIR, slug)
+    if os.path.exists(folder):
+        try:
+            subprocess.Popen(['explorer', folder])
+            report_done(cmd_id, {'success': True, 'path': folder, 'message': f'Đã mở: {folder}'})
+        except Exception as e:
+            report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
+    else:
+        report_done(cmd_id, {'success': False, 'message': f'Thư mục không tồn tại: {folder}'}, 'error')
+
 
 def handle_kill_scrapers(payload, cmd_id):
     global SCRAPER_PIDS, KILL_RUNNING, LAST_KILL_TS
@@ -707,6 +735,7 @@ HANDLERS = {
     'sync_selected':       handle_sync_selected,
     'check_upload_content':handle_check_upload_content,
     'do_upload':           handle_do_upload,
+    'open_folder':         handle_open_folder,
 }
 
 def _ts():

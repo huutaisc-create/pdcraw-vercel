@@ -198,6 +198,7 @@ class handler(BaseHTTPRequestHandler):
                 acc_idx       = data.get('account_index', -1)
                 admin_name    = data.get('admin_name')
                 source_filter = data.get('source_filter')  # 'PD' | 'WIKI' | None
+                machine_label = data.get('machine_label', '')   # label của máy đang crawl
 
                 admin_filter = "AND (admin_control IS NULL OR admin_control = '')"
                 f_args = []
@@ -221,6 +222,7 @@ class handler(BaseHTTPRequestHandler):
                         OR (crawl_status = 'crawling' AND (last_account_idx = %s OR last_updated < NOW() - INTERVAL '5 minutes'))
                     )
                     {source_clause}
+                    AND (storage_label IS NULL OR storage_label = '' OR storage_label = %s)
                     {admin_filter}
                     ORDER BY
                         CASE WHEN crawl_status='repairing' THEN 0
@@ -231,12 +233,12 @@ class handler(BaseHTTPRequestHandler):
                         last_updated ASC
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
-                """, [acc_idx, acc_idx] + f_args + [acc_idx, acc_idx])
+                """, [acc_idx, acc_idx, machine_label] + f_args + [acc_idx, acc_idx])
 
                 story = cur.fetchone()
                 if story:
-                    cur.execute("UPDATE stories SET crawl_status='crawling', last_account_idx=%s, last_updated=NOW() WHERE id=%s",
-                                (acc_idx, story['id']))
+                    cur.execute("UPDATE stories SET crawl_status='crawling', last_account_idx=%s, storage_label=%s, last_updated=NOW() WHERE id=%s",
+                                (acc_idx, machine_label or None, story['id']))
                     conn.commit()
                     self._json({'success': True, 'story': dict(story)})
                 else:

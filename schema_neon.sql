@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS agent_kv (
     value TEXT
 );
 
+-- Migration: thêm storage_label cho stories (máy nào lưu truyện này)
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS storage_label VARCHAR(20) DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_stories_storage_label ON stories(storage_label);
+
 -- ============================================================
 -- Migrate data từ MariaDB (chạy sau khi dump ra CSV)
 -- COPY stories FROM '/path/to/stories.csv' CSV HEADER;

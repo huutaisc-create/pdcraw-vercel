@@ -132,6 +132,9 @@
                             <button id="btn-change-status" onclick="openChangeStatusModal()" class="whitespace-nowrap bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-yellow-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🏷</span><span>ĐỔI TRẠNG THÁI</span>
                             </button>
+                            <button onclick="openChangeMachineModal()" class="whitespace-nowrap bg-blue-700 hover:bg-blue-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>🖥️</span><span>ĐỔI MÁY</span>
+                            </button>
                             <button onclick="resetBot()" class="whitespace-nowrap bg-slate-600 hover:bg-slate-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🤖</span><span>RESET BOT</span>
                             </button>
@@ -174,6 +177,7 @@
                                 <th class="p-4">Tiến độ (Web)</th>
                                 <th class="p-4">Thực tế (File)</th>
                                 <th class="p-4">Upload Web</th>
+                                <th class="p-4 text-center w-16">Máy</th>
                                 <th class="p-4 text-center">Trạng thái</th>
                             </tr>
                         </thead>
@@ -414,6 +418,29 @@
         </div>
     </div>
 
+    <!-- Modal Đổi Máy -->
+    <div id="modal-change-machine" class="fixed inset-0 bg-black/90 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-slate-900 p-8 rounded-2xl w-full max-w-sm border border-blue-500/40 shadow-[0_0_50px_rgba(59,130,246,0.15)]">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-xl">🖥️</div>
+                <div>
+                    <h2 class="text-lg font-bold text-blue-400">Đổi Máy Lưu Trữ</h2>
+                    <p class="text-slate-500 text-xs mt-0.5" id="cm-subtitle">Chọn đường dẫn muốn chuyển sang</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mb-4">
+                <button onclick="applyChangeMachine('A')" class="py-4 rounded-lg font-black text-lg border border-blue-700 bg-blue-900/40 hover:border-blue-400 hover:bg-blue-800/60 text-blue-300 transition-all active:scale-95">A</button>
+                <button onclick="applyChangeMachine('B')" class="py-4 rounded-lg font-black text-lg border border-green-700 bg-green-900/40 hover:border-green-400 hover:bg-green-800/60 text-green-300 transition-all active:scale-95">B</button>
+                <button onclick="applyChangeMachine('C')" class="py-4 rounded-lg font-black text-lg border border-yellow-700 bg-yellow-900/40 hover:border-yellow-400 hover:bg-yellow-800/60 text-yellow-300 transition-all active:scale-95">C</button>
+                <button onclick="applyChangeMachine('D')" class="py-4 rounded-lg font-black text-lg border border-purple-700 bg-purple-900/40 hover:border-purple-400 hover:bg-purple-800/60 text-purple-300 transition-all active:scale-95">D</button>
+                <button onclick="applyChangeMachine('E')" class="py-4 rounded-lg font-black text-lg border border-pink-700 bg-pink-900/40 hover:border-pink-400 hover:bg-pink-800/60 text-pink-300 transition-all active:scale-95">E</button>
+                <button onclick="applyChangeMachine(null)" class="py-4 rounded-lg font-black text-sm border border-slate-600 bg-slate-800 hover:border-slate-400 text-slate-400 transition-all active:scale-95">Xoá</button>
+            </div>
+            <p class="text-[10px] text-slate-600 text-center mb-4">⚠ "Xoá" = reset về NULL — máy nào cũng có thể crawl lại</p>
+            <button onclick="closeModal('modal-change-machine')" class="w-full py-2 rounded text-slate-500 hover:text-white text-xs font-bold transition-colors">Huỷ</button>
+        </div>
+    </div>
+
     <!-- Login Modal -->
     <div id="modal-login" class="fixed inset-0 bg-black/95 flex flex-col items-center justify-center z-[100] backdrop-blur-md hidden">
         <div class="glass p-8 rounded-2xl w-full max-w-md border border-orange-500/30 text-center shadow-[0_0_100px_rgba(249,115,22,0.1)]">
@@ -422,7 +449,19 @@
              <p class="text-slate-500 text-xs mb-6">Nhập tên định danh của bạn để bắt đầu quản lý.</p>
              
              <input type="text" id="admin-name-input" class="w-full bg-slate-900 border border-white/10 rounded p-3 text-center text-white font-bold mb-4 focus:border-orange-500 focus:outline-none placeholder-slate-600" placeholder="Ví dụ: Admin Huy, Admin Laptop...">
-             
+
+             <div class="mb-4">
+                 <label class="block text-xs text-slate-500 mb-2 text-left font-bold uppercase tracking-widest">Đường dẫn lưu trữ (Máy này là máy nào?)</label>
+                 <select id="machine-label-input" class="w-full bg-slate-900 border border-white/10 rounded p-3 text-white font-bold focus:border-orange-500 focus:outline-none" style="appearance:none;">
+                     <option value="">-- Chọn đường dẫn --</option>
+                     <option value="A">📁 Đường dẫn A</option>
+                     <option value="B">📁 Đường dẫn B</option>
+                     <option value="C">📁 Đường dẫn C</option>
+                     <option value="D">📁 Đường dẫn D</option>
+                     <option value="E">📁 Đường dẫn E</option>
+                 </select>
+             </div>
+
              <button onclick="doLogin()" class="w-full py-3 bg-orange-600 hover:bg-orange-500 rounded font-bold text-white shadow-lg shadow-orange-500/20 active:scale-95 transition-all">
                  XÁC NHẬN (ENTER)
              </button>
@@ -434,6 +473,34 @@
         let curPage = 1;
         let totalPages = 1;
         let currentTab = 'stories';
+
+        // ─── MACHINE LABEL ─────────────────────────────────────────────────
+        const MACHINE_COLORS = {
+            'A': 'background:#1d4ed8;color:#bfdbfe;border-color:#3b82f6',
+            'B': 'background:#065f46;color:#a7f3d0;border-color:#10b981',
+            'C': 'background:#92400e;color:#fde68a;border-color:#f59e0b',
+            'D': 'background:#5b21b6;color:#ddd6fe;border-color:#8b5cf6',
+            'E': 'background:#9d174d;color:#fbcfe8;border-color:#ec4899',
+        };
+        function machineLabelStyle(label) {
+            return MACHINE_COLORS[label] || 'background:#1e293b;color:#94a3b8;border-color:#475569';
+        }
+
+        async function openFolder(slug) {
+            const admin = localStorage.getItem('admin_name');
+            if (!admin) return alert('Bạn chưa đăng nhập!');
+            try {
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'open_folder', slug, admin})
+                });
+                const data = await res.json();
+                if (!data.success) alert('Không mở được thư mục: ' + (data.message || ''));
+            } catch(e) {
+                alert('Lỗi: ' + e.message);
+            }
+        }
 
         // ─── SOURCE SWITCHING ───────────────────────────────────────────────
         let currentSource = localStorage.getItem('current_source') || 'PD';
@@ -687,6 +754,15 @@
                             ${uploadHTML}
                         </td>
 
+                        <!-- COL machine: Máy lưu trữ -->
+                        <td class="p-4 text-center w-16">
+                            ${s.storage_label
+                                ? `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-black border" style="${machineLabelStyle(s.storage_label)}" title="Lưu tại đường dẫn ${s.storage_label}">${s.storage_label}</span>
+                                   <button onclick="openFolder('${s.slug}')" title="Mở thư mục truyện" class="block mx-auto mt-1 text-slate-500 hover:text-slate-200 transition-all text-base">📂</button>`
+                                : '<span class="text-slate-700 text-[10px]">—</span>'
+                            }
+                        </td>
+
                         <!-- COL 6: Trạng thái -->
                         <td class="p-4 text-center">
                             <span class="status-badge status-${s.crawl_status}">${s.crawl_status}</span>
@@ -712,7 +788,7 @@
                 // Bỏ qua AbortError — do race condition fix huỷ request cũ, không phải lỗi thật
                 if (e && e.name === 'AbortError') return;
                 console.error(e);
-                document.getElementById('story-list').innerHTML = `<tr><td colspan="7" class="text-center p-8 text-red-500">Lỗi kết nối: ${e.message}</td></tr>`;
+                document.getElementById('story-list').innerHTML = `<tr><td colspan="8" class="text-center p-8 text-red-500">Lỗi kết nối: ${e.message}</td></tr>`;
                 return;
             }
         }
@@ -1237,6 +1313,33 @@
             }
         }
 
+        function openChangeMachineModal() {
+            const checked = document.querySelectorAll('.story-ck:checked, .story-ck-completed:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            document.getElementById('cm-subtitle').innerText = `Áp dụng cho ${checked.length} truyện đã chọn`;
+            document.getElementById('modal-change-machine').classList.remove('hidden');
+        }
+
+        async function applyChangeMachine(label) {
+            const checked = document.querySelectorAll('.story-ck:checked, .story-ck-completed:checked');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            if (ids.length === 0) return;
+            closeModal('modal-change-machine');
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
+                    action: 'change_storage_label',
+                    ids: ids,
+                    label: label
+                }), headers: {'Content-Type': 'application/json'} });
+                const data = await res.json();
+                const labelText = label ? `Máy ${label}` : 'NULL (bỏ gán)';
+                showToast(`✅ Đã chuyển ${data.updated ?? ids.length} truyện → ${labelText}`, 'green');
+                loadStories();
+            } catch(e) {
+                showToast('❌ Lỗi: ' + e.message, 'red');
+            }
+        }
+
         async function crawlMissing() {
             const checked = document.querySelectorAll('.story-ck:checked');
             if(checked.length === 0) return alert('Chưa chọn truyện nào!');
@@ -1281,24 +1384,29 @@
         // --- LOGIN & POOL LOGIC ---
         function checkLogin() {
             const admin = localStorage.getItem('admin_name');
+            const ml = localStorage.getItem('machine_label') || '';
             const headerName = document.getElementById('header-admin-name');
-            console.log("DEBUG: ADMIN LOGIN SCRIPT LOADED v2 - Admin:", admin);
-            
+
             if (admin) {
                  document.getElementById('modal-login').classList.add('hidden');
-                 if(headerName) headerName.innerText = admin;
+                 if(headerName) headerName.innerText = admin + (ml ? ` [Máy ${ml}]` : '');
+                 // Pre-select machine label in modal nếu mở lại
+                 const mlInput = document.getElementById('machine-label-input');
+                 if(mlInput && ml) mlInput.value = ml;
             } else {
                 document.getElementById('modal-login').classList.remove('hidden');
                 if(headerName) headerName.innerText = "LOGIN (CLICK ME)";
             }
         }
-        
+
         function doLogin() {
             const val = document.getElementById('admin-name-input').value.trim();
             if(!val) return alert("Vui lòng nhập tên!");
+            const ml = document.getElementById('machine-label-input').value;
             localStorage.setItem('admin_name', val);
+            if(ml) localStorage.setItem('machine_label', ml);
             document.getElementById('modal-login').classList.add('hidden');
-            location.reload(); 
+            location.reload();
         }
         
         // Ensure input exists before adding listener (it should)

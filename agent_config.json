@@ -8,5 +8,6 @@
   "check_update_script": "./client-source/check_update.py",
   "accounts_file": "./accounts.txt",
   "wiki_scraper_script": "./client-source/wiki_scraper_agent.py",
-  "wiki_accounts_file":  "./client-source/userpass-wiki.txt"
+  "wiki_accounts_file":  "./client-source/userpass-wiki.txt",
+  "machine_label":       "A"
 }
