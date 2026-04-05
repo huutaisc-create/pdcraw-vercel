@@ -225,6 +225,11 @@ def handle_start_scraper(payload, cmd_id):
             bot_env['DATA_IMPORT_DIR']     = str(IMPORT_DIR)
             bot_env['ACCOUNTS_FILE']       = str(ACCOUNTS_FILE)
             bot_env['WIKI_ACCOUNTS_FILE']  = str(WIKI_ACCOUNTS_FILE)  # ← truyền cho wiki
+            # Chia đều accounts cho từng bot — bot i lấy các index i, i+N, i+2N,...
+            # Ví dụ: 4 accounts, 2 bots → bot0=[0,2], bot1=[1,3]
+            n_bots = len(account_idxs)
+            bot_assigned = [account_idxs[j] for j in range(i, len(account_idxs), n_bots)]
+            bot_env['BOT_ASSIGNED_ACCOUNTS'] = ','.join(str(x) for x in bot_assigned)
 
             proc = subprocess.Popen(
                 [sys.executable, script_path, str(acc_idx), '--admin', admin],

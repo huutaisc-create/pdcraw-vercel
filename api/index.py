@@ -137,10 +137,10 @@ class handler(BaseHTTPRequestHandler):
                 # Chọn file account theo source (PD hoặc WIKI)
                 source_param = params.get('source', ['PD'])[0].upper()
                 if source_param == 'WIKI':
-                    accounts_path = os.path.join(os.path.dirname(__file__), '..', 'userpass-wiki.txt')
+                    accounts_path = os.path.normpath(os.path.join(_API_DIR, '..', 'userpass-wiki.txt'))
                     lock_key = 'wiki'
                 else:
-                    accounts_path = os.path.join(os.path.dirname(__file__), '..', 'accounts.txt')
+                    accounts_path = os.path.normpath(os.path.join(_API_DIR, '..', 'accounts.txt'))
                     lock_key = 'pd'
                 try:
                     with open(accounts_path, encoding='utf-8') as f:
@@ -447,6 +447,14 @@ class handler(BaseHTTPRequestHandler):
                         """, (email, idx, admin, source_param))
                 conn.commit()
                 self._json({'success': True, 'message': f'Locked {len(indexes)} accounts ({source_param}) for {admin}.'})
+
+            elif action == 'batch_check_slugs':
+                slugs = data.get('slugs', [])
+                if not slugs:
+                    self._json({'existing': []}); conn.close(); return
+                cur.execute("SELECT slug FROM stories WHERE slug = ANY(%s::text[])", (slugs,))
+                existing = [r['slug'] for r in cur.fetchall()]
+                self._json({'existing': existing})
 
             elif action == 'resolve_conflicts':
                 updates = data.get('updates', []); count = 0
