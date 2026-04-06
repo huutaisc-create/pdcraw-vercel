@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS agent_kv (
 ALTER TABLE stories ADD COLUMN IF NOT EXISTS storage_label VARCHAR(20) DEFAULT NULL;
 CREATE INDEX IF NOT EXISTS idx_stories_storage_label ON stories(storage_label);
 
+-- Migration: thêm meta_status (trạng thái thu thập thông tin để đổi tên)
+-- NULL = chưa xử lý, 'no_chapter_names' = không có tên chương, 'ready' = đã có meta JSON
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS meta_status VARCHAR(30) DEFAULT NULL;
+
 -- ============================================================
 -- Migrate data từ MariaDB (chạy sau khi dump ra CSV)
 -- COPY stories FROM '/path/to/stories.csv' CSV HEADER;

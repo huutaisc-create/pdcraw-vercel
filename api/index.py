@@ -262,7 +262,8 @@ class handler(BaseHTTPRequestHandler):
             'do_upload', 'check_upload_content',
             'sync_progress', 'sync_selected',
             'delete_menu_map',
-            'open_folder',   # ← thêm vào
+            'open_folder',
+            'generate_meta',   # ← thu thập thông tin để đổi tên truyện
         }
 
         if action in LOCAL_ACTIONS:
@@ -472,6 +473,17 @@ class handler(BaseHTTPRequestHandler):
                     cur.execute(
                         "UPDATE stories SET storage_label=%s, last_updated=NOW() WHERE id = ANY(%s)",
                         (label, ids)
+                    )
+                    conn.commit()
+                self._json({'success': True, 'updated': len(ids)})
+
+            elif action == 'update_meta_status':
+                ids    = data.get('ids', [])
+                status = data.get('status')  # 'ready' | 'no_chapter_names' | None (reset)
+                if ids:
+                    cur.execute(
+                        "UPDATE stories SET meta_status=%s, last_updated=NOW() WHERE id = ANY(%s)",
+                        (status, ids)
                     )
                     conn.commit()
                 self._json({'success': True, 'updated': len(ids)})

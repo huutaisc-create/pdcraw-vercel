@@ -147,6 +147,9 @@
                             <button id="btn-check-upload" onclick="openCheckUploadModal()" class="whitespace-nowrap bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-teal-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>⬆</span><span>CHECK & UPLOAD</span>
                             </button>
+                            <button onclick="generateMeta()" class="whitespace-nowrap bg-violet-700 hover:bg-violet-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-violet-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>📝</span><span>LẤY META</span>
+                            </button>
                         </div>
                     </div>
                     <!-- Legend -->
@@ -522,6 +525,74 @@
             }
         }
 
+        // ─── GENERATE META ──────────────────────────────────────────────────
+        async function generateMeta() {
+            const admin = localStorage.getItem('admin_name');
+            if (!admin) return alert('Bạn chưa đăng nhập!');
+
+            // Lấy các truyện đang được chọn (checkbox tick)
+            const checked = [...document.querySelectorAll('.story-ck:checked, .story-ck-completed:checked')];
+            if (checked.length === 0) {
+                showToast('⚠️ Chưa chọn truyện nào', 'red'); return;
+            }
+            const ids = checked.map(ck => parseInt(ck.value));
+
+            // Lấy thông tin cần thiết của từng truyện từ danh sách hiện tại
+            const stories = [];
+            for (const id of ids) {
+                const tr = document.querySelector(`.story-ck[value="${id}"], .story-ck-completed[value="${id}"]`)?.closest('tr');
+                if (!tr) continue;
+                // Đọc data từ dataset của button 📂 (nếu có)
+                const folderBtn = tr.querySelector('[data-slug]');
+                const slug  = folderBtn?.dataset.slug  || '';
+                const title = folderBtn?.dataset.title || '';
+                // Link URL từ thẻ <a>
+                const link = tr.querySelector('a[href]');
+                const url  = link?.href || '';
+                // Source: đọc từ currentSource
+                stories.push({id, slug, title, source: currentSource, url});
+            }
+
+            showToast(`📝 Đang lấy meta ${stories.length} truyện...`, 'blue');
+
+            try {
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'generate_meta', stories, admin})
+                });
+                const data = await res.json();
+                if (!data.success && !data.command_id) {
+                    showToast('❌ ' + (data.message || 'Lỗi'), 'red'); return;
+                }
+                const cmdId = data.command_id;
+                if (!cmdId) { showToast('❌ Không lấy được command_id', 'red'); return; }
+
+                // Poll kết quả — có thể mất vài phút nếu cần scrape wiki
+                showToast(`📝 Đã gửi lệnh (id=${cmdId}), đang chờ agent...`, 'blue');
+                for (let i = 0; i < 120; i++) {
+                    await new Promise(r => setTimeout(r, 3000));
+                    const r2 = await fetch(`/api?action=get_command_result&command_id=${cmdId}`);
+                    const d2 = await r2.json();
+                    if (d2.status === 'done') {
+                        const result = d2.result || {};
+                        showToast(
+                            `✅ LẤY META xong: ${result.ready ?? 0} ready | ${result.no_names ?? 0} không tên | ${result.errors ?? 0} lỗi`,
+                            'green'
+                        );
+                        loadStories(); // refresh để hiện badge
+                        return;
+                    }
+                    if (d2.status === 'error') {
+                        showToast('❌ ' + (d2.result?.message || 'Agent báo lỗi'), 'red'); return;
+                    }
+                }
+                showToast('⚠️ Timeout — agent chạy quá lâu hoặc không phản hồi', 'red');
+            } catch(e) {
+                showToast('❌ Lỗi: ' + e.message, 'red');
+            }
+        }
+
         // ─── SOURCE SWITCHING ───────────────────────────────────────────────
         let currentSource = localStorage.getItem('current_source') || 'PD';
         const SOURCE_STYLES = {
@@ -740,6 +811,8 @@
                                 <a href="${s.url}" target="_blank" class="decoration-none hover:underline truncate max-w-[250px] block" title="${s.title}">${s.title}</a>
                                 ${storyAdmin ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${adminColor}">👤 ${storyAdmin}</span>` : ''}
                                 ${checkCache[s.id] ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black border uppercase ${checkCache[s.id].status === 'warn' ? 'text-amber-400 border-amber-700 bg-amber-900/20' : 'text-red-400 border-red-700 bg-red-900/20'}" title="${checkCache[s.id].summary}">⚠ ${checkCache[s.id].label}</span>` : ''}
+                                ${s.meta_status === 'ready' ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-black border uppercase text-violet-300 border-violet-700 bg-violet-900/20" title="Đã có thông tin meta, sẵn sàng đổi tên">📝 META</span>' : ''}
+                                ${s.meta_status === 'no_chapter_names' ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-black border uppercase text-slate-400 border-slate-700 bg-slate-800/50" title="Không có tên chương — xử lý thủ công">— Không tên chương</span>' : ''}
                             </div>
                             <div class="text-[10px] text-slate-500 mt-1 uppercase tracking-wide flex gap-2">
                                  <span>${s.author}</span>

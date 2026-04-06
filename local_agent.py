@@ -316,6 +316,434 @@ def handle_open_folder(payload, cmd_id):
                          'message': f'Không tìm thấy thư mục. Đã thử: {candidates}'}, 'error')
 
 
+def handle_generate_meta(payload, cmd_id):
+    """Thu thập thông tin tên chương + mô tả cho danh sách truyện (để đổi tên về sau).
+
+    Quy trình mỗi truyện:
+    1. Tìm thư mục truyện (title-based → slug → unquote slug)
+    2. Quét file .txt trong thư mục, phát hiện pattern tên chương:
+       - Chuong-N / Chapter-N → KHÔNG có tên chương
+       - Tên thực → Hướng 1: lấy từ tên file
+    3. Nếu không có tên chương:
+       - PD: đọc menu_map_v1.json đã có sẵn trên disk
+       - WIKI: dùng Selenium scrape URL trong DB
+       - Không có gì → meta_status='no_chapter_names'
+    4. Lưu story_meta.json vào thư mục truyện
+    5. Cập nhật meta_status trong DB
+    """
+    stories = payload.get('stories', [])  # list of {id, slug, title, source, url}
+
+    def safe_name(t):
+        import unicodedata as _ud
+        n = _ud.normalize('NFD', t)
+        n = ''.join(c for c in n if _ud.category(c) != 'Mn')
+        n = re.sub(r'[\\/*?:"<>|]', '', n)
+        n = re.sub(r'[^\w\s-]', '', n).strip()
+        n = re.sub(r'[\s_]+', '-', n)
+        n = re.sub(r'-+', '-', n).strip('-')
+        return n[:80].lower() if n else 'unknown'
+
+    NO_NAME_RE = re.compile(
+        r'^(chuong|chapter|chap|c)[-_]?\d+_\d{4}\.txt$', re.IGNORECASE
+    )
+
+    def find_story_dir(slug, title):
+        candidates = []
+        if title:
+            candidates.append(os.path.join(IMPORT_DIR, safe_name(title)))
+        if slug:
+            candidates.append(os.path.join(IMPORT_DIR, slug))
+            candidates.append(os.path.join(IMPORT_DIR, urllib.parse.unquote(slug)))
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+        return None
+
+    def get_chapter_files(story_dir):
+        """Trả về list tên file chương (đã sort theo index)."""
+        files = []
+        for f in os.listdir(story_dir):
+            if f.endswith('.txt') and re.search(r'_\d{4}\.txt$', f):
+                files.append(f)
+        files.sort(key=lambda f: int(re.search(r'_(\d{4})\.txt$', f).group(1)))
+        return files
+
+    def extract_title_from_filename(fname):
+        """Bỏ phần _NNNN.txt ở cuối."""
+        return re.sub(r'_\d{4}\.txt$', '', fname).strip()
+
+    # ── Bước 1: Phân loại các truyện ────────────────────────────────────────
+    results       = []
+    wiki_need_scrape = []   # truyện WIKI cần mở browser
+
+    for s in stories:
+        sid    = s.get('id')
+        slug   = s.get('slug', '').strip()
+        title  = s.get('title', '').strip()
+        source = s.get('source', 'PD').upper()
+        url    = s.get('url', '')
+
+        story_dir = find_story_dir(slug, title)
+        if not story_dir:
+            update_story_remote(sid, meta_status='no_chapter_names')
+            results.append({'id': sid, 'status': 'error', 'message': 'Không tìm thấy thư mục'})
+            continue
+
+        chapter_files = get_chapter_files(story_dir)
+        if not chapter_files:
+            update_story_remote(sid, meta_status='no_chapter_names')
+            results.append({'id': sid, 'status': 'no_names', 'message': 'Thư mục không có file chương'})
+            continue
+
+        # Kiểm tra có tên chương thực sự không
+        has_real_names = any(not NO_NAME_RE.match(f) for f in chapter_files)
+
+        if has_real_names:
+            # Hướng 1: lấy tên từ tên file
+            chapter_titles = [extract_title_from_filename(f) for f in chapter_files]
+            meta = {
+                'story_id':       sid,
+                'original_title': title,
+                'source':         source,
+                'url':            url,
+                'method':         'from_files',
+                'description':    '',
+                'chapter_titles': chapter_titles,
+                'total_chapters': len(chapter_titles),
+                'generated_at':   datetime.datetime.now().isoformat(),
+            }
+            _save_meta_json(story_dir, meta)
+            update_story_remote(sid, meta_status='ready')
+            results.append({'id': sid, 'status': 'ready', 'method': 'from_files',
+                            'chapters': len(chapter_titles)})
+            print(f"  [META] #{sid} {title[:30]} → from_files ({len(chapter_titles)} chương)")
+
+        else:
+            # Không có tên chương thực — thử đọc menu_map (PD) hoặc scrape (WIKI)
+            menu_map_path = os.path.join(story_dir, 'menu_map_v1.json')
+            if os.path.exists(menu_map_path):
+                # PD / bất kỳ source: menu_map sẵn trên disk
+                try:
+                    with open(menu_map_path, encoding='utf-8') as f:
+                        menu_map = json.load(f)
+                    chapter_titles = [menu_map[str(i)] for i in sorted(int(k) for k in menu_map.keys())]
+                    meta = {
+                        'story_id':       sid,
+                        'original_title': title,
+                        'source':         source,
+                        'url':            url,
+                        'method':         'from_menu_map',
+                        'description':    '',
+                        'chapter_titles': chapter_titles,
+                        'total_chapters': len(chapter_titles),
+                        'generated_at':   datetime.datetime.now().isoformat(),
+                    }
+                    _save_meta_json(story_dir, meta)
+                    update_story_remote(sid, meta_status='ready')
+                    results.append({'id': sid, 'status': 'ready', 'method': 'from_menu_map',
+                                    'chapters': len(chapter_titles)})
+                    print(f"  [META] #{sid} {title[:30]} → from_menu_map ({len(chapter_titles)} chương)")
+                except Exception as e:
+                    update_story_remote(sid, meta_status='no_chapter_names')
+                    results.append({'id': sid, 'status': 'error', 'message': f'Đọc menu_map lỗi: {e}'})
+
+            elif source == 'WIKI' and url:
+                # Cần scrape bằng Selenium — đưa vào danh sách xử lý sau
+                wiki_need_scrape.append({'s': s, 'story_dir': story_dir})
+                # Kết quả sẽ được thêm vào results sau
+
+            else:
+                # PD không có menu_map và không phải WIKI → không có cách nào lấy tên
+                update_story_remote(sid, meta_status='no_chapter_names')
+                results.append({'id': sid, 'status': 'no_names',
+                                'message': 'Không có tên chương, không có menu_map'})
+                print(f"  [META] #{sid} {title[:30]} → no_chapter_names")
+
+    # ── Bước 2: Xử lý WIKI cần scrape (mở browser 1 lần) ───────────────────
+    if wiki_need_scrape:
+        wiki_results = _scrape_wiki_meta_batch(wiki_need_scrape)
+        results.extend(wiki_results)
+
+    done_count    = sum(1 for r in results if r.get('status') == 'ready')
+    no_name_count = sum(1 for r in results if r.get('status') == 'no_names')
+    err_count     = sum(1 for r in results if r.get('status') == 'error')
+    report_done(cmd_id, {
+        'success': True,
+        'total':   len(stories),
+        'ready':   done_count,
+        'no_names': no_name_count,
+        'errors':  err_count,
+        'results': results,
+    })
+
+
+def _save_meta_json(story_dir, meta):
+    """Lưu story_meta.json vào thư mục truyện."""
+    path = os.path.join(story_dir, 'story_meta.json')
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def _scrape_wiki_meta_batch(items):
+    """Mở 1 Chrome, scrape description + chapter list từ wikicv.net cho nhiều truyện."""
+    results = []
+    driver = None
+    temp_dir = None
+
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from webdriver_manager.chrome import ChromeDriverManager
+        import shutil, tempfile
+
+        options = Options()
+        options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_experimental_option('excludeSwitches', ['enable-automation'])
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--start-maximized')
+        options.add_argument('--disable-notifications')
+        options.add_argument('--blink-settings=imagesEnabled=false')
+        options.add_argument('--log-level=3')
+        temp_dir = tempfile.mkdtemp()
+        options.add_argument(f'--user-data-dir={temp_dir}')
+
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        print("  [META] Chrome khởi động cho WIKI scraping")
+
+        # Đọc danh sách tài khoản Wiki
+        wiki_accounts = []
+        if WIKI_ACCOUNTS_FILE and os.path.exists(WIKI_ACCOUNTS_FILE):
+            try:
+                with open(WIKI_ACCOUNTS_FILE, encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '|' in line:
+                            parts = line.split('|', 1)
+                            wiki_accounts.append((parts[0].strip(), parts[1].strip()))
+            except Exception as e:
+                print(f"  [META] Không đọc được wiki accounts: {e}")
+        acc_idx = 0
+        logged_in = False
+
+        for item in items:
+            s         = item['s']
+            story_dir = item['story_dir']
+            sid       = s.get('id')
+            title     = s.get('title', '').strip()
+            url       = s.get('url', '')
+            source    = s.get('source', 'WIKI').upper()
+
+            try:
+                detail = _wiki_get_story_detail(driver, url)
+                results.append({
+                    'id': sid, 'status': 'ready', 'method': 'scraped_wiki',
+                    'chapters': len(detail.get('chapter_titles', []))
+                })
+            except _WikiAccessLimit:
+                # Thử đăng nhập
+                login_ok = False
+                while acc_idx < len(wiki_accounts):
+                    u, p = wiki_accounts[acc_idx]
+                    acc_idx += 1
+                    try:
+                        _wiki_login(driver, u, p)
+                        logged_in = True
+                        print(f"  [META] Đăng nhập wiki: {u}")
+                        login_ok = True
+                        break
+                    except Exception as le:
+                        print(f"  [META] Login thất bại {u}: {le}")
+
+                if login_ok:
+                    try:
+                        detail = _wiki_get_story_detail(driver, url)
+                    except Exception as e2:
+                        update_story_remote(sid, meta_status='no_chapter_names')
+                        results.append({'id': sid, 'status': 'no_names',
+                                        'message': f'Scrape thất bại sau login: {e2}'})
+                        continue
+                else:
+                    update_story_remote(sid, meta_status='no_chapter_names')
+                    results.append({'id': sid, 'status': 'no_names',
+                                    'message': 'Hết lượt, không còn account để đăng nhập'})
+                    continue
+
+            except Exception as e:
+                update_story_remote(sid, meta_status='no_chapter_names')
+                results.append({'id': sid, 'status': 'error', 'message': str(e)})
+                continue
+
+            meta = {
+                'story_id':       sid,
+                'original_title': title,
+                'source':         source,
+                'url':            url,
+                'method':         'scraped_wiki',
+                'description':    detail.get('description', ''),
+                'chapter_titles': detail.get('chapter_titles', []),
+                'total_chapters': len(detail.get('chapter_titles', [])),
+                'generated_at':   datetime.datetime.now().isoformat(),
+            }
+            _save_meta_json(story_dir, meta)
+            update_story_remote(sid, meta_status='ready')
+            print(f"  [META] #{sid} {title[:30]} → scraped_wiki ({len(detail.get('chapter_titles',[]))} chương)")
+
+    except ImportError:
+        print("  [META] Selenium không khả dụng — WIKI stories đánh dấu no_chapter_names")
+        for item in items:
+            sid = item['s'].get('id')
+            update_story_remote(sid, meta_status='no_chapter_names')
+            results.append({'id': sid, 'status': 'no_names', 'message': 'Selenium chưa cài đặt'})
+    except Exception as e:
+        print(f"  [META] Lỗi WIKI scraping: {e}")
+        for item in items:
+            if not any(r['id'] == item['s'].get('id') for r in results):
+                sid = item['s'].get('id')
+                update_story_remote(sid, meta_status='no_chapter_names')
+                results.append({'id': sid, 'status': 'error', 'message': str(e)})
+    finally:
+        if driver:
+            try: driver.quit()
+            except: pass
+        if temp_dir:
+            try:
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except: pass
+
+    return results
+
+
+class _WikiAccessLimit(Exception): pass
+
+
+def _wiki_login(driver, username, password):
+    """Đăng nhập wikicv.net."""
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    driver.get('https://wikicv.net')
+    WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'body')))
+    import time as _time; _time.sleep(2)
+
+    try:
+        logout_probe = driver.find_elements(By.CSS_SELECTOR, 'a[data-action="logout"]')
+        if logout_probe:
+            return  # Đã đăng nhập
+    except: pass
+
+    login_btn = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, 'a[data-action="login"]'))
+    )
+    login_btn.click()
+    _time.sleep(3)
+
+    windows = driver.window_handles
+    is_new_window = len(windows) > 1
+    main_window = driver.current_window_handle
+    if is_new_window:
+        driver.switch_to.window(windows[-1])
+    else:
+        iframes = driver.find_elements(By.TAG_NAME, 'iframe')
+        if iframes:
+            driver.switch_to.frame(iframes[0])
+
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, 'username')))
+    driver.find_element(By.NAME, 'username').send_keys(username)
+    driver.find_element(By.NAME, 'password').send_keys(password)
+    try: driver.find_element(By.NAME, 'remember').click()
+    except: pass
+    driver.find_element(By.ID, 'login').click()
+
+    if is_new_window:
+        driver.switch_to.window(main_window)
+    else:
+        try: driver.switch_to.default_content()
+        except: pass
+
+    WebDriverWait(driver, 15).until(EC.url_contains('wikicv.net'))
+    _time.sleep(2)
+
+
+def _wiki_get_story_detail(driver, url):
+    """Scrape tên chương + mô tả từ trang truyện wikicv.net.
+    Raise _WikiAccessLimit nếu hết lượt."""
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    import time as _time
+
+    ACCESS_MSG = "Đã hết lượt truy cập"
+    driver.get(url)
+    _time.sleep(4)
+
+    if ACCESS_MSG in driver.page_source:
+        raise _WikiAccessLimit(f"Hết lượt tại {url}")
+
+    # Mô tả truyện — thử nhiều selector
+    description = ''
+    for sel in ['.book-intro', '.book-summary', '#bookSummary',
+                '.story-detail .content', '.book-detail .content p']:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            description = el.text.strip()
+            if description:
+                break
+        except: pass
+
+    # Lấy danh sách chương — xử lý phân trang
+    chapter_titles = []
+
+    def _get_chapters_on_page():
+        try:
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'ul li.chapter-name a'))
+            )
+            return [el.text.strip() for el in driver.find_elements(By.CSS_SELECTOR, 'ul li.chapter-name a')]
+        except:
+            return []
+
+    # Kéo xuống để pagination hiện
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    _time.sleep(2)
+
+    first_page = _get_chapters_on_page()
+    chapter_titles.extend(first_page)
+
+    # Kiểm tra phân trang
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    page_buttons = soup.select('ul.pagination li a')
+    page_numbers = [int(b.text.strip()) for b in page_buttons if b.text.strip().isdigit()]
+    max_page = max(page_numbers) if page_numbers else 1
+
+    for p in range(2, max_page + 1):
+        # Click số trang
+        try:
+            links = driver.find_elements(By.CSS_SELECTOR, 'ul.pagination li a')
+            for a in links:
+                if a.text.strip() == str(p):
+                    driver.execute_script("arguments[0].click();", a)
+                    _time.sleep(2)
+                    break
+            chapter_titles.extend(_get_chapters_on_page())
+        except Exception as e:
+            print(f"  [META] Không load được trang {p}: {e}")
+            break
+
+    return {'description': description, 'chapter_titles': chapter_titles}
+
+
 def handle_kill_scrapers(payload, cmd_id):
     global SCRAPER_PIDS, KILL_RUNNING, LAST_KILL_TS
     killed = []
@@ -763,6 +1191,7 @@ HANDLERS = {
     'check_upload_content':handle_check_upload_content,
     'do_upload':           handle_do_upload,
     'open_folder':         handle_open_folder,
+    'generate_meta':       handle_generate_meta,
 }
 
 def _ts():
