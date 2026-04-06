@@ -293,7 +293,7 @@ def handle_open_folder(payload, cmd_id):
         n = re.sub(r'[^\w\s-]', '', n).strip()
         n = re.sub(r'[\s_]+', '-', n)
         n = re.sub(r'-+', '-', n).strip('-')
-        return n[:80] if n else 'unknown'
+        return n[:80].lower() if n else 'unknown'
 
     # Thứ tự thử: title → slug → slug unquoted
     candidates = []
