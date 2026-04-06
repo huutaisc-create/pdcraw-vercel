@@ -274,7 +274,8 @@ def handle_start_scraper(payload, cmd_id):
 
 def handle_open_folder(payload, cmd_id):
     """Mở thư mục truyện trong Windows Explorer."""
-    slug = payload.get('slug', '').strip()
+    import urllib.parse
+    slug = urllib.parse.unquote(payload.get('slug', '').strip())
     if not slug:
         report_done(cmd_id, {'success': False, 'message': 'Thiếu slug'}, 'error')
         return
