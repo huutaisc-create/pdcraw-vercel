@@ -284,10 +284,16 @@ def handle_open_folder(payload, cmd_id):
         report_done(cmd_id, {'success': False, 'message': 'Thiếu slug/title'}, 'error')
         return
 
-    # Tạo safe title (giống safe_folder_name trong wiki_scraper_agent)
+    # Tạo safe title (phải giống hệt safe_folder_name trong wiki_scraper_agent)
     def safe_name(t):
-        n = re.sub(r'[\\/*?:"<>|]', '', t).strip()
-        return re.sub(r'\s+', ' ', n)[:100]
+        import unicodedata as _ud
+        n = _ud.normalize('NFD', t)
+        n = ''.join(c for c in n if _ud.category(c) != 'Mn')
+        n = re.sub(r'[\\/*?:"<>|]', '', n)
+        n = re.sub(r'[^\w\s-]', '', n).strip()
+        n = re.sub(r'[\s_]+', '-', n)
+        n = re.sub(r'-+', '-', n).strip('-')
+        return n[:80] if n else 'unknown'
 
     # Thứ tự thử: title → slug → slug unquoted
     candidates = []
