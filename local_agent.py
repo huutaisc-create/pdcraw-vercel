@@ -273,21 +273,41 @@ def handle_start_scraper(payload, cmd_id):
     report_done(cmd_id, {'success': True, 'started': len(pids), 'pids': pids})
 
 def handle_open_folder(payload, cmd_id):
-    """Mở thư mục truyện trong Windows Explorer."""
-    slug = payload.get('slug', '').strip()
-    # Slug trong DB và tên folder trên disk giữ nguyên ký tự (kể cả %7E), không decode
-    if not slug:
-        report_done(cmd_id, {'success': False, 'message': 'Thiếu slug'}, 'error')
+    """Mở thư mục truyện trong Windows Explorer.
+    Thử lần lượt: title (wiki dùng title), slug (PD dùng slug), slug đã unquote."""
+    import urllib.parse, re
+
+    slug  = payload.get('slug', '').strip()
+    title = payload.get('title', '').strip()
+
+    if not slug and not title:
+        report_done(cmd_id, {'success': False, 'message': 'Thiếu slug/title'}, 'error')
         return
-    folder = os.path.join(IMPORT_DIR, slug)
-    if os.path.exists(folder):
-        try:
-            subprocess.Popen(['explorer', folder])
-            report_done(cmd_id, {'success': True, 'path': folder, 'message': f'Đã mở: {folder}'})
-        except Exception as e:
-            report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
-    else:
-        report_done(cmd_id, {'success': False, 'message': f'Thư mục không tồn tại: {folder}'}, 'error')
+
+    # Tạo safe title (giống safe_folder_name trong wiki_scraper_agent)
+    def safe_name(t):
+        n = re.sub(r'[\\/*?:"<>|]', '', t).strip()
+        return re.sub(r'\s+', ' ', n)[:100]
+
+    # Thứ tự thử: title → slug → slug unquoted
+    candidates = []
+    if title:
+        candidates.append(os.path.join(IMPORT_DIR, safe_name(title)))
+    if slug:
+        candidates.append(os.path.join(IMPORT_DIR, slug))
+        candidates.append(os.path.join(IMPORT_DIR, urllib.parse.unquote(slug)))
+
+    for folder in candidates:
+        if os.path.exists(folder):
+            try:
+                subprocess.Popen(['explorer', folder])
+                report_done(cmd_id, {'success': True, 'path': folder})
+            except Exception as e:
+                report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
+            return
+
+    report_done(cmd_id, {'success': False,
+                         'message': f'Không tìm thấy thư mục. Đã thử: {candidates}'}, 'error')
 
 
 def handle_kill_scrapers(payload, cmd_id):
