@@ -176,6 +176,15 @@ class handler(BaseHTTPRequestHandler):
                 self._json({'labels': labels})
 
             # ── get crawling story by acc_idx (dùng để chờ bot claim) ────
+            elif action == 'get_story':
+                sid = params.get('id', [None])[0]
+                if sid:
+                    cur.execute("SELECT id, title, slug, url FROM stories WHERE id=%s", (int(sid),))
+                    row = cur.fetchone()
+                    self._json({'story': dict(row) if row else None})
+                else:
+                    self._json({'story': None})
+
             elif action == 'get_crawling_story':
                 acc_idx = params.get('acc_idx', [None])[0]
                 if acc_idx is not None:

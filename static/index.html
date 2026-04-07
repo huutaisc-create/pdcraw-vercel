@@ -1324,22 +1324,31 @@
         async function syncSelected() {
             const checked = document.querySelectorAll('.story-ck:checked');
             if(checked.length === 0) return alert('Chưa chọn truyện nào!');
-            
+
             const ids = Array.from(checked).map(c => parseInt(c.value));
+            // Gửi kèm title để agent tìm đúng thư mục
+            const titles = {};
+            checked.forEach(c => {
+                const row = c.closest('tr');
+                const a = row ? row.querySelector('td:nth-child(2) a') : null;
+                if (a) titles[parseInt(c.value)] = a.innerText.trim();
+            });
+
             const btn = document.getElementById('btn-sync');
             const originalText = btn.innerText;
             btn.innerText = "⏳..."; btn.disabled = true;
-            
+
             try {
-                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'sync_selected', ids: ids})});
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'sync_selected', ids, titles})});
                 const data = await res.json();
-                alert(data.message);
+                if (data.queued) showToast('✅ Đã gửi lệnh sync cho agent.', 'green');
+                else alert(data.message || JSON.stringify(data));
             } catch(e) {
                 alert("Lỗi sync: " + e);
             }
-            
+
             btn.innerText = originalText; btn.disabled = false;
-            loadStories();
+            setTimeout(loadStories, 4000);
         }
 
         let _importLocalStoryId = null;

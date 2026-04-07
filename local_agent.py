@@ -982,25 +982,69 @@ def _wait_updates(cmd_id, proc):
             except: pass
     report_done(cmd_id, [], 'done')
 
-def handle_sync_selected(payload, cmd_id):
-    ids = payload.get('ids', [])
-    results = []
-    for sid in ids:
-        # Lấy slug từ Vercel
-        try:
-            story_data = _request('GET', f'/api/agent?action=poll')  # placeholder
-            # Thực tế: agent cần query trực tiếp hoặc payload có slug
-            slug = payload.get('slugs', {}).get(str(sid), '')
-            if not slug:
-                results.append({'id': sid, 'ok': False, 'msg': 'No slug'})
+def _safe_folder_name(title):
+    """Giống safe_folder_name trong wiki_scraper_agent.py."""
+    import unicodedata as _ud
+    name = _ud.normalize('NFD', title)
+    name = ''.join(c for c in name if _ud.category(c) != 'Mn')
+    name = re.sub(r'[\\/*?:"<>|]', '', name)
+    name = re.sub(r'[^\w\s-]', '', name).strip()
+    name = re.sub(r'[\s_]+', '-', name)
+    name = re.sub(r'-+', '-', name).strip('-')
+    return name[:80].lower() if name else 'unknown'
+
+def _get_local_max_chapter(story_dir):
+    """Đếm số chương lớn nhất từ tên file .txt (hỗ trợ cả PD và Wiki)."""
+    max_idx = 0
+    try:
+        for fname in os.listdir(story_dir):
+            if not fname.endswith('.txt'):
                 continue
-            info = scan_story_dir(slug)
-            update_story_remote(sid,
-                downloaded_chapters=info['max_index'],
-                actual_chapters=info['actual_count'])
-            results.append({'id': sid, 'ok': True, 'max': info['max_index']})
+            m = re.search(r'(\d+)', fname)
+            if m:
+                max_idx = max(max_idx, int(m.group(1)))
+    except Exception:
+        pass
+    return max_idx
+
+def handle_sync_selected(payload, cmd_id):
+    ids    = payload.get('ids', [])
+    titles = payload.get('titles', {})  # {story_id: title}
+    results = []
+    print(f"  [DBG sync_selected] ids={ids}, titles={titles}")
+
+    for sid in ids:
+        try:
+            title = titles.get(str(sid), '') or titles.get(sid, '')
+            # Nếu không có title trong payload → query DB lấy title
+            if not title:
+                print(f"  [DBG sync_selected] Không có title cho id={sid}, query DB...")
+                resp = _request('GET', f'/api?action=get_story&id={sid}')
+                if resp and resp.get('story'):
+                    title = resp['story'].get('title', '')
+                    print(f"  [DBG sync_selected] Lấy title từ DB: {title!r}")
+            if not title:
+                results.append({'id': sid, 'ok': False, 'msg': 'Không tìm được title'})
+                continue
+
+            folder_name = _safe_folder_name(title)
+            story_dir = os.path.join(IMPORT_DIR, folder_name)
+            print(f"  [DBG sync_selected] id={sid}, title={title!r}, folder={folder_name}, exists={os.path.exists(story_dir)}")
+
+            if not os.path.exists(story_dir):
+                results.append({'id': sid, 'ok': False, 'msg': f'Không tìm thấy thư mục: {folder_name}'})
+                continue
+
+            max_idx = _get_local_max_chapter(story_dir)
+            files = [f for f in os.listdir(story_dir) if f.endswith('.txt')]
+            print(f"  [DBG sync_selected] id={sid}, max_idx={max_idx}, files={len(files)}")
+
+            update_story_remote(sid, downloaded_chapters=max_idx, actual_chapters=len(files))
+            results.append({'id': sid, 'ok': True, 'max': max_idx, 'files': len(files)})
         except Exception as e:
+            import traceback; traceback.print_exc()
             results.append({'id': sid, 'ok': False, 'msg': str(e)})
+
     report_done(cmd_id, {'success': True, 'results': results})
 
 def handle_check_upload_content(payload, cmd_id):
