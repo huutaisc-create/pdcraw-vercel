@@ -264,6 +264,7 @@ class handler(BaseHTTPRequestHandler):
             'delete_menu_map',
             'open_folder',
             'generate_meta',   # ← thu thập thông tin để đổi tên truyện
+            'import_local_data',
         }
 
         if action in LOCAL_ACTIONS:
@@ -412,6 +413,14 @@ class handler(BaseHTTPRequestHandler):
                     )
                     conn.commit()
                 self._json({'success': True, 'updated': len(ids)})
+
+            elif action == 'delete_stories':
+                ids = data.get('ids', [])
+                if not ids:
+                    self._json({'success': False, 'message': 'Không có ID nào được chọn'}); conn.close(); return
+                cur.execute("DELETE FROM stories WHERE id = ANY(%s)", (ids,))
+                conn.commit()
+                self._json({'success': True, 'deleted': cur.rowcount})
 
             elif action == 'crawl_missing':
                 ids = data.get('ids', [])

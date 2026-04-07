@@ -1180,6 +1180,37 @@ def _clean_content(text):
     out = [l.strip() for l in text.splitlines() if l.strip() and not any(p.search(l.strip()) for p in compiled)]
     return '\n'.join(out).strip()
 
+def handle_import_local_data(payload, cmd_id):
+    """Ghi nhận data truyện đã có sẵn trên local vào DB.
+    Quét thư mục data_import/<folder_name>, đếm số chương lớn nhất từ tên file,
+    update downloaded_chapters và crawl_status='paused' lên DB."""
+    story_id    = payload.get('story_id')
+    folder_name = payload.get('folder_name', '').strip()
+
+    if not story_id or not folder_name:
+        report_done(cmd_id, {'success': False, 'message': 'Thiếu story_id hoặc folder_name'}, 'error')
+        return
+
+    story_dir = os.path.join(IMPORT_DIR, folder_name)
+    if not os.path.exists(story_dir):
+        report_done(cmd_id, {'success': False, 'message': f'Không tìm thấy thư mục: {story_dir}'}, 'error')
+        return
+
+    files = [f for f in os.listdir(story_dir) if f.endswith('.txt')]
+    max_idx = 0
+    for fname in files:
+        m = re.search(r'(\d+)', fname)
+        if m:
+            max_idx = max(max_idx, int(m.group(1)))
+
+    if max_idx == 0:
+        report_done(cmd_id, {'success': False, 'message': f'Không tìm thấy file chương nào trong {folder_name}'}, 'error')
+        return
+
+    update_story_remote(story_id, downloaded_chapters=max_idx, crawl_status='paused')
+    print(f"  [✓] Import local: story_id={story_id}, folder={folder_name}, max_idx={max_idx}, files={len(files)}")
+    report_done(cmd_id, {'success': True, 'folder': folder_name, 'downloaded_chapters': max_idx, 'total_files': len(files)})
+
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 HANDLERS = {
@@ -1192,6 +1223,7 @@ HANDLERS = {
     'do_upload':           handle_do_upload,
     'open_folder':         handle_open_folder,
     'generate_meta':       handle_generate_meta,
+    'import_local_data':   handle_import_local_data,
 }
 
 def _ts():

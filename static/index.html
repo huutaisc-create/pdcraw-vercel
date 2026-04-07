@@ -141,11 +141,17 @@
                             <button onclick="resetCrawlingAll()" class="whitespace-nowrap bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-cyan-500/20 transition-all active:scale-95 flex items-center gap-1.5 border border-cyan-400">
                                 <span>🛠️</span><span>GIẢI CỨU KẸT TRUYỆN</span>
                             </button>
+                            <button onclick="deleteStories()" class="whitespace-nowrap bg-red-900 hover:bg-red-800 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg transition-all active:scale-95 flex items-center gap-1.5 border border-red-700">
+                                <span>🗑</span><span>XÓA TRUYỆN</span>
+                            </button>
                             <button onclick="deleteMenuMap()" class="whitespace-nowrap bg-rose-800 hover:bg-rose-700 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🗑</span><span>XÓA MENU MAP</span>
                             </button>
                             <button id="btn-check-upload" onclick="openCheckUploadModal()" class="whitespace-nowrap bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-teal-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>⬆</span><span>CHECK & UPLOAD</span>
+                            </button>
+                            <button onclick="openImportLocalModal()" class="whitespace-nowrap bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-emerald-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>📁</span><span>NHẬP DATA LOCAL</span>
                             </button>
                             <button onclick="generateMeta()" class="whitespace-nowrap bg-violet-700 hover:bg-violet-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-violet-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>📝</span><span>LẤY META</span>
@@ -441,6 +447,21 @@
             </div>
             <p class="text-[10px] text-slate-600 text-center mb-4">⚠ "Xoá" = reset về NULL — máy nào cũng có thể crawl lại</p>
             <button onclick="closeModal('modal-change-machine')" class="w-full py-2 rounded text-slate-500 hover:text-white text-xs font-bold transition-colors">Huỷ</button>
+        </div>
+    </div>
+
+    <!-- Import Local Data Modal -->
+    <div id="modal-import-local" class="fixed inset-0 bg-black/90 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="glass p-6 rounded-2xl w-full max-w-md border border-emerald-500/30 shadow-[0_0_60px_rgba(16,185,129,0.1)]">
+            <h3 class="text-lg font-bold text-emerald-400 mb-4">📁 Ghi nhận data local</h3>
+            <p class="text-slate-400 text-xs mb-1">Truyện đã chọn: <span id="import-local-title" class="text-white font-bold"></span></p>
+            <p class="text-slate-400 text-xs mb-4">Tên thư mục trong <code class="text-emerald-300">data_import/</code>:</p>
+            <input id="import-local-folder" type="text" placeholder="ten-thu-muc-truyen"
+                class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-emerald-500" />
+            <div class="flex gap-3">
+                <button onclick="doImportLocalData()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-sm transition-all active:scale-95">Ghi nhận</button>
+                <button onclick="document.getElementById('modal-import-local').classList.add('hidden')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded text-sm transition-all active:scale-95">Huỷ</button>
+            </div>
         </div>
     </div>
 
@@ -1319,6 +1340,59 @@
             
             btn.innerText = originalText; btn.disabled = false;
             loadStories();
+        }
+
+        let _importLocalStoryId = null;
+
+        function openImportLocalModal() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chọn đúng 1 truyện!');
+            if (checked.length > 1) return alert('Chỉ chọn 1 truyện mỗi lần!');
+            const c = checked[0];
+            _importLocalStoryId = parseInt(c.value);
+            const row = c.closest('tr');
+            const title = row ? (row.querySelector('td:nth-child(2) a')?.innerText || '') : '';
+            document.getElementById('import-local-title').innerText = title;
+            document.getElementById('import-local-folder').value = '';
+            document.getElementById('modal-import-local').classList.remove('hidden');
+        }
+
+        async function doImportLocalData() {
+            const folderName = document.getElementById('import-local-folder').value.trim();
+            if (!folderName) return alert('Nhập tên thư mục!');
+            if (!_importLocalStoryId) return;
+            document.getElementById('modal-import-local').classList.add('hidden');
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
+                    action: 'import_local_data',
+                    story_id: _importLocalStoryId,
+                    folder_name: folderName
+                })});
+                const data = await res.json();
+                if (data.queued) {
+                    showToast(`✅ Đã gửi lệnh cho local agent. Chờ agent xử lý...`, 'green');
+                    setTimeout(loadStories, 5000);
+                } else {
+                    showToast('❌ ' + (data.error || JSON.stringify(data)), 'red');
+                }
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
+        }
+
+        async function deleteStories() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            if (!confirm(`⚠️ Xóa VĨNH VIỄN ${ids.length} truyện khỏi DB?\nHành động này không thể hoàn tác!`)) return;
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'delete_stories', ids }) });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ Đã xóa ${data.deleted} truyện khỏi DB.`, 'green');
+                    loadStories();
+                } else {
+                    showToast('❌ ' + data.message, 'red');
+                }
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
         }
 
         async function deleteMenuMap() {
