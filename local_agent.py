@@ -1181,35 +1181,44 @@ def _clean_content(text):
     return '\n'.join(out).strip()
 
 def handle_import_local_data(payload, cmd_id):
-    """Ghi nhận data truyện đã có sẵn trên local vào DB.
-    Quét thư mục data_import/<folder_name>, đếm số chương lớn nhất từ tên file,
-    update downloaded_chapters và crawl_status='paused' lên DB."""
-    story_id    = payload.get('story_id')
-    folder_name = payload.get('folder_name', '').strip()
+    """Ghi nhận data truyện đã có sẵn trên local vào DB."""
+    try:
+        print(f"  [DBG import_local] payload={payload}")
+        story_id    = payload.get('story_id')
+        folder_name = payload.get('folder_name', '').strip()
+        print(f"  [DBG import_local] story_id={story_id}, folder_name={folder_name!r}")
 
-    if not story_id or not folder_name:
-        report_done(cmd_id, {'success': False, 'message': 'Thiếu story_id hoặc folder_name'}, 'error')
-        return
+        if not story_id or not folder_name:
+            report_done(cmd_id, {'success': False, 'message': 'Thiếu story_id hoặc folder_name'}, 'error')
+            return
 
-    story_dir = os.path.join(IMPORT_DIR, folder_name)
-    if not os.path.exists(story_dir):
-        report_done(cmd_id, {'success': False, 'message': f'Không tìm thấy thư mục: {story_dir}'}, 'error')
-        return
+        story_dir = os.path.join(IMPORT_DIR, folder_name)
+        print(f"  [DBG import_local] story_dir={story_dir}, exists={os.path.exists(story_dir)}")
+        if not os.path.exists(story_dir):
+            report_done(cmd_id, {'success': False, 'message': f'Không tìm thấy thư mục: {story_dir}'}, 'error')
+            return
 
-    files = [f for f in os.listdir(story_dir) if f.endswith('.txt')]
-    max_idx = 0
-    for fname in files:
-        m = re.search(r'(\d+)', fname)
-        if m:
-            max_idx = max(max_idx, int(m.group(1)))
+        files = [f for f in os.listdir(story_dir) if f.endswith('.txt')]
+        print(f"  [DBG import_local] Tìm thấy {len(files)} file .txt")
+        max_idx = 0
+        for fname in files:
+            m = re.search(r'(\d+)', fname)
+            if m:
+                max_idx = max(max_idx, int(m.group(1)))
 
-    if max_idx == 0:
-        report_done(cmd_id, {'success': False, 'message': f'Không tìm thấy file chương nào trong {folder_name}'}, 'error')
-        return
+        print(f"  [DBG import_local] max_idx={max_idx}")
+        if max_idx == 0:
+            report_done(cmd_id, {'success': False, 'message': f'Không tìm thấy file chương nào trong {folder_name}'}, 'error')
+            return
 
-    update_story_remote(story_id, downloaded_chapters=max_idx, crawl_status='paused')
-    print(f"  [✓] Import local: story_id={story_id}, folder={folder_name}, max_idx={max_idx}, files={len(files)}")
-    report_done(cmd_id, {'success': True, 'folder': folder_name, 'downloaded_chapters': max_idx, 'total_files': len(files)})
+        update_story_remote(story_id, downloaded_chapters=max_idx, crawl_status='paused')
+        print(f"  [✓] Import local: story_id={story_id}, folder={folder_name}, max_idx={max_idx}, files={len(files)}")
+        report_done(cmd_id, {'success': True, 'folder': folder_name, 'downloaded_chapters': max_idx, 'total_files': len(files)})
+    except Exception as e:
+        import traceback
+        print(f"  [!] handle_import_local_data EXCEPTION: {e}")
+        traceback.print_exc()
+        report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 

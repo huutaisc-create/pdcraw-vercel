@@ -1369,12 +1369,36 @@
                     folder_name: folderName
                 })});
                 const data = await res.json();
-                if (data.queued) {
-                    showToast(`✅ Đã gửi lệnh cho local agent. Chờ agent xử lý...`, 'green');
-                    setTimeout(loadStories, 5000);
-                } else {
+                if (!data.queued) {
                     showToast('❌ ' + (data.error || JSON.stringify(data)), 'red');
+                    return;
                 }
+                const cmdId = data.command_id;
+                showToast(`⏳ Đã gửi lệnh (id=${cmdId}), đang chờ agent xử lý...`, 'blue');
+
+                // Poll kết quả tối đa 30s
+                let elapsed = 0;
+                const poll = setInterval(async () => {
+                    elapsed += 2;
+                    try {
+                        const r = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'check_command', command_id: cmdId }) });
+                        const d = await r.json();
+                        if (d.status === 'done') {
+                            clearInterval(poll);
+                            const result = d.result || {};
+                            if (result.success) {
+                                showToast(`✅ Ghi nhận xong: ${result.downloaded_chapters} chương (${result.total_files} file) trong "${result.folder}"`, 'green');
+                            } else {
+                                showToast(`❌ Agent báo lỗi: ${result.message || JSON.stringify(result)}`, 'red');
+                            }
+                            loadStories();
+                        } else if (d.status === 'error' || elapsed >= 30) {
+                            clearInterval(poll);
+                            showToast(elapsed >= 30 ? '⚠️ Agent không phản hồi sau 30s' : `❌ Lỗi: ${d.status}`, 'red');
+                            loadStories();
+                        }
+                    } catch(e) { clearInterval(poll); }
+                }, 2000);
             } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
         }
 

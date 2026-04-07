@@ -295,6 +295,22 @@ class handler(BaseHTTPRequestHandler):
             return
 
         # ── Status-check actions (POST nhưng chỉ đọc DB, không queue) ──────────
+        if action == 'check_command':
+            try:
+                cmd_id = data.get('command_id')
+                conn = get_conn(); cur = conn.cursor()
+                cur.execute("SELECT status, result FROM agent_commands WHERE id=%s", (cmd_id,))
+                row = cur.fetchone()
+                conn.close()
+                if not row:
+                    self._json({'status': 'not_found'})
+                else:
+                    result = json.loads(row['result']) if row['result'] else {}
+                    self._json({'status': row['status'], 'result': result})
+            except Exception as e:
+                self._json({'success': False, 'message': str(e)}, 500)
+            return
+
         if action in ('check_discovery', 'check_update_status'):
             try:
                 conn = get_conn(); cur = conn.cursor()
