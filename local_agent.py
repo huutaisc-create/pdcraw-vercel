@@ -1228,9 +1228,10 @@ def handle_import_local_data(payload, cmd_id):
     """Ghi nhận data truyện đã có sẵn trên local vào DB."""
     try:
         print(f"  [DBG import_local] payload={payload}")
-        story_id    = payload.get('story_id')
-        folder_name = payload.get('folder_name', '').strip()
-        print(f"  [DBG import_local] story_id={story_id}, folder_name={folder_name!r}")
+        story_id      = payload.get('story_id')
+        folder_name   = payload.get('folder_name', '').strip()
+        storage_label = payload.get('storage_label', '').strip()
+        print(f"  [DBG import_local] story_id={story_id}, folder_name={folder_name!r}, storage_label={storage_label!r}")
 
         if not story_id or not folder_name:
             report_done(cmd_id, {'success': False, 'message': 'Thiếu story_id hoặc folder_name'}, 'error')
@@ -1255,8 +1256,11 @@ def handle_import_local_data(payload, cmd_id):
             report_done(cmd_id, {'success': False, 'message': f'Không tìm thấy file chương nào trong {folder_name}'}, 'error')
             return
 
-        update_story_remote(story_id, downloaded_chapters=max_idx, crawl_status='paused')
-        print(f"  [✓] Import local: story_id={story_id}, folder={folder_name}, max_idx={max_idx}, files={len(files)}")
+        update_kwargs = {'downloaded_chapters': max_idx, 'crawl_status': 'paused'}
+        if storage_label:
+            update_kwargs['storage_label'] = storage_label
+        update_story_remote(story_id, **update_kwargs)
+        print(f"  [✓] Import local: story_id={story_id}, folder={folder_name}, max_idx={max_idx}, files={len(files)}, machine={storage_label}")
         report_done(cmd_id, {'success': True, 'folder': folder_name, 'downloaded_chapters': max_idx, 'total_files': len(files)})
     except Exception as e:
         import traceback

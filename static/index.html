@@ -455,9 +455,17 @@
         <div class="glass p-6 rounded-2xl w-full max-w-md border border-emerald-500/30 shadow-[0_0_60px_rgba(16,185,129,0.1)]">
             <h3 class="text-lg font-bold text-emerald-400 mb-4">📁 Ghi nhận data local</h3>
             <p class="text-slate-400 text-xs mb-1">Truyện đã chọn: <span id="import-local-title" class="text-white font-bold"></span></p>
-            <p class="text-slate-400 text-xs mb-4">Tên thư mục trong <code class="text-emerald-300">data_import/</code>:</p>
+            <p class="text-slate-400 text-xs mb-2">Tên thư mục trong <code class="text-emerald-300">data_import/</code>:</p>
             <input id="import-local-folder" type="text" placeholder="ten-thu-muc-truyen"
-                class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-emerald-500" />
+                class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mb-3 focus:outline-none focus:border-emerald-500" />
+            <p class="text-slate-400 text-xs mb-2">Máy lưu trữ:</p>
+            <select id="import-local-machine" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-emerald-500">
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+                <option value="E">E</option>
+            </select>
             <div class="flex gap-3">
                 <button onclick="doImportLocalData()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-sm transition-all active:scale-95">Ghi nhận</button>
                 <button onclick="document.getElementById('modal-import-local').classList.add('hidden')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded text-sm transition-all active:scale-95">Huỷ</button>
@@ -1372,10 +1380,12 @@
             if (!_importLocalStoryId) return;
             document.getElementById('modal-import-local').classList.add('hidden');
             try {
+                const machine = document.getElementById('import-local-machine').value;
                 const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
                     action: 'import_local_data',
                     story_id: _importLocalStoryId,
-                    folder_name: folderName
+                    folder_name: folderName,
+                    storage_label: machine
                 })});
                 const data = await res.json();
                 if (!data.queued) {

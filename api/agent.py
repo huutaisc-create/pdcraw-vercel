@@ -166,12 +166,14 @@ class handler(BaseHTTPRequestHandler):
                 uploaded         = data.get('uploaded_chapters')
                 actual           = data.get('actual_chapters')
                 meta_status      = data.get('meta_status', '__unset__')
+                storage_label    = data.get('storage_label', '__unset__')
                 sets, args = [], []
                 if downloaded is not None:       sets.append("downloaded_chapters=%s"); args.append(downloaded)
                 if status_val:                   sets.append("crawl_status=%s");         args.append(status_val)
                 if uploaded is not None:         sets.append("uploaded_chapters=%s");    args.append(uploaded)
                 if actual is not None:           sets.append("actual_chapters=%s");      args.append(actual)
                 if meta_status != '__unset__':   sets.append("meta_status=%s");          args.append(meta_status)
+                if storage_label != '__unset__': sets.append("storage_label=%s");        args.append(storage_label or None)
                 if sets:
                     args.append(sid)
                     cur.execute(f"UPDATE stories SET {', '.join(sets)}, last_updated=NOW() WHERE id=%s", args)
