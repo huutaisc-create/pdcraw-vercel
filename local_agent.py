@@ -316,6 +316,93 @@ def handle_open_folder(payload, cmd_id):
                          'message': f'Không tìm thấy thư mục. Đã thử: {candidates}'}, 'error')
 
 
+def _save_simple_meta(story_dir, story_id, title, source, url, method='auto_scan'):
+    """Tạo meta.json đơn giản trong thư mục truyện nếu chưa tồn tại.
+    Trả về True nếu tạo mới, False nếu đã có sẵn."""
+    meta_path = os.path.join(story_dir, 'meta.json')
+    if os.path.exists(meta_path):
+        return False
+    meta = {
+        'story_id':       story_id,
+        'original_title': title or '',
+        'source':         (source or 'PD').upper(),
+        'url':            url or '',
+        'method':         method,
+        'include chuong': '0',
+    }
+    with open(meta_path, 'w', encoding='utf-8') as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    return True
+
+
+def handle_generate_meta_all(payload, cmd_id):
+    """Quét tất cả truyện đã craw >= 1 chương trong DB, tạo meta.json cho mỗi thư mục tìm thấy."""
+    import unicodedata as _ud
+
+    def safe_name(t):
+        n = _ud.normalize('NFD', t)
+        n = ''.join(c for c in n if _ud.category(c) != 'Mn')
+        n = re.sub(r'[\\/*?:"<>|]', '', n)
+        n = re.sub(r'[^\w\s-]', '', n).strip()
+        n = re.sub(r'[\s_]+', '-', n)
+        n = re.sub(r'-+', '-', n).strip('-')
+        return n[:80].lower() if n else 'unknown'
+
+    def find_story_dir(slug, title):
+        candidates = []
+        if title:
+            candidates.append(os.path.join(IMPORT_DIR, safe_name(title)))
+        if slug:
+            candidates.append(os.path.join(IMPORT_DIR, slug))
+            candidates.append(os.path.join(IMPORT_DIR, urllib.parse.unquote(slug)))
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+        return None
+
+    # Lấy danh sách truyện từ Vercel API
+    try:
+        data = _request('GET', '/api?action=list_stories_for_meta')
+        stories = data.get('stories', [])
+    except Exception as e:
+        report_done(cmd_id, {'success': False, 'message': f'Lỗi lấy danh sách: {e}'}, 'error')
+        return
+
+    created = skipped = errors = 0
+    for s in stories:
+        sid    = s.get('id')
+        slug   = (s.get('slug') or '').strip()
+        title  = (s.get('title') or '').strip()
+        source = (s.get('source') or 'PD').upper()
+        url    = s.get('url') or ''
+
+        story_dir = find_story_dir(slug, title)
+        if not story_dir:
+            errors += 1
+            print(f"  [META-ALL] #{sid} {title[:30]} → không tìm thấy thư mục")
+            continue
+
+        try:
+            ok = _save_simple_meta(story_dir, sid, title, source, url, method='auto_scan')
+            if ok:
+                created += 1
+                print(f"  [META-ALL] #{sid} {title[:30]} → tạo meta.json")
+            else:
+                skipped += 1
+        except Exception as e:
+            errors += 1
+            print(f"  [META-ALL] #{sid} {title[:30]} → lỗi: {e}")
+
+    print(f"[META-ALL] Xong: {created} tạo mới | {skipped} đã có | {errors} lỗi (total={len(stories)})")
+    report_done(cmd_id, {
+        'success': True,
+        'total':   len(stories),
+        'created': created,
+        'skipped': skipped,
+        'errors':  errors,
+    })
+
+
 def handle_generate_meta(payload, cmd_id):
     """Thu thập thông tin tên chương + mô tả cho danh sách truyện (để đổi tên về sau).
 
@@ -1275,7 +1362,7 @@ HANDLERS = {
     'check_upload_content':handle_check_upload_content,
     'do_upload':           handle_do_upload,
     'open_folder':         handle_open_folder,
-    'generate_meta':       handle_generate_meta,
+    'generate_meta_all':   handle_generate_meta_all,
     'import_local_data':   handle_import_local_data,
 }
 
