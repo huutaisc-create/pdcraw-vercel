@@ -123,6 +123,16 @@ class handler(BaseHTTPRequestHandler):
                     'stats': {'queue': q_count, 'running': r_count, 'my_queue': q_mine}
                 })
 
+            # ── list stories for meta generation ────────────────────────────
+            elif action == 'list_stories_for_meta':
+                cur.execute("""
+                    SELECT id, title, slug, url, source
+                    FROM stories
+                    WHERE downloaded_chapters >= 1
+                    ORDER BY id
+                """)
+                self._json({'success': True, 'stories': [dict(r) for r in cur.fetchall()]})
+
             # ── categories ──────────────────────────────────────────────────
             elif action == 'get_categories':
                 source = params.get('source', [''])[0]
@@ -272,7 +282,7 @@ class handler(BaseHTTPRequestHandler):
             'sync_progress', 'sync_selected',
             'delete_menu_map',
             'open_folder',
-            'generate_meta',   # ← thu thập thông tin để đổi tên truyện
+            'generate_meta_all',  # ← tạo meta.json cho tất cả truyện đã craw
             'import_local_data',
         }
 
@@ -386,7 +396,7 @@ class handler(BaseHTTPRequestHandler):
                 sid = data['id']; is_sel = data['selected']; admin = data.get('admin')
                 cur.execute("SELECT crawl_status, downloaded_chapters FROM stories WHERE id = %s", (sid,))
                 row = cur.fetchone()
-                if row:
+                if row and row['crawl_status'] != 'completed':
                     if is_sel:
                         cur.execute("UPDATE stories SET crawl_status='selected', admin_control=%s WHERE id=%s", (admin, sid))
                     else:
@@ -399,9 +409,9 @@ class handler(BaseHTTPRequestHandler):
                 ids = data.get('ids', []); is_sel = data['selected']; admin = data.get('admin')
                 for sid in ids:
                     if is_sel:
-                        cur.execute("UPDATE stories SET crawl_status='selected', admin_control=%s WHERE id=%s", (admin, sid))
+                        cur.execute("UPDATE stories SET crawl_status='selected', admin_control=%s WHERE id=%s AND crawl_status != 'completed'", (admin, sid))
                     else:
-                        cur.execute("UPDATE stories SET crawl_status=CASE WHEN downloaded_chapters>0 THEN 'paused' ELSE 'pending' END, admin_control=NULL WHERE id=%s", (sid,))
+                        cur.execute("UPDATE stories SET crawl_status=CASE WHEN downloaded_chapters>0 THEN 'paused' ELSE 'pending' END, admin_control=NULL WHERE id=%s AND crawl_status != 'completed'", (sid,))
                 conn.commit()
                 self._json({'success': True, 'message': f'Updated {len(ids)} stories.'})
 

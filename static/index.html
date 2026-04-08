@@ -559,36 +559,13 @@
             const admin = localStorage.getItem('admin_name');
             if (!admin) return alert('Bạn chưa đăng nhập!');
 
-            // Lấy các truyện đang được chọn (checkbox tick)
-            const checked = [...document.querySelectorAll('.story-ck:checked, .story-ck-completed:checked')];
-            if (checked.length === 0) {
-                showToast('⚠️ Chưa chọn truyện nào', 'red'); return;
-            }
-            const ids = checked.map(ck => parseInt(ck.value));
-
-            // Lấy thông tin cần thiết của từng truyện từ danh sách hiện tại
-            const stories = [];
-            for (const id of ids) {
-                const tr = document.querySelector(`.story-ck[value="${id}"], .story-ck-completed[value="${id}"]`)?.closest('tr');
-                if (!tr) continue;
-                // Đọc data từ dataset của button 📂 (nếu có)
-                const folderBtn = tr.querySelector('[data-slug]');
-                const slug  = folderBtn?.dataset.slug  || '';
-                const title = folderBtn?.dataset.title || '';
-                // Link URL từ thẻ <a>
-                const link = tr.querySelector('a[href]');
-                const url  = link?.href || '';
-                // Source: đọc từ currentSource
-                stories.push({id, slug, title, source: currentSource, url});
-            }
-
-            showToast(`📝 Đang lấy meta ${stories.length} truyện...`, 'blue');
+            showToast('📝 Đang tạo meta.json cho tất cả truyện đã craw...', 'blue');
 
             try {
                 const res = await fetch('/api', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({action: 'generate_meta', stories, admin})
+                    body: JSON.stringify({action: 'generate_meta_all', admin})
                 });
                 const data = await res.json();
                 if (!data.success && !data.command_id) {
@@ -597,7 +574,6 @@
                 const cmdId = data.command_id;
                 if (!cmdId) { showToast('❌ Không lấy được command_id', 'red'); return; }
 
-                // Poll kết quả — có thể mất vài phút nếu cần scrape wiki
                 showToast(`📝 Đã gửi lệnh (id=${cmdId}), đang chờ agent...`, 'blue');
                 for (let i = 0; i < 120; i++) {
                     await new Promise(r => setTimeout(r, 3000));
@@ -606,10 +582,9 @@
                     if (d2.status === 'done') {
                         const result = d2.result || {};
                         showToast(
-                            `✅ LẤY META xong: ${result.ready ?? 0} ready | ${result.no_names ?? 0} không tên | ${result.errors ?? 0} lỗi`,
+                            `✅ META xong: ${result.created ?? 0} tạo mới | ${result.skipped ?? 0} đã có | ${result.errors ?? 0} lỗi`,
                             'green'
                         );
-                        loadStories(); // refresh để hiện badge
                         return;
                     }
                     if (d2.status === 'error') {
@@ -1305,13 +1280,13 @@
                 return;
             }
             
-            const checkboxes = document.querySelectorAll('.story-ck');
-            const ids = Array.from(checkboxes).map(c => parseInt(c.value));
-            
-            if(ids.length === 0) return;
-            
-            // Visual feedback
-            checkboxes.forEach(c => c.checked = checked);
+            const allCheckboxes = document.querySelectorAll('.story-ck');
+            const ids = Array.from(document.querySelectorAll('.story-ck:not(.story-ck-completed)')).map(c => parseInt(c.value));
+
+            // Visual feedback cho tất cả (kể cả completed)
+            allCheckboxes.forEach(c => c.checked = checked);
+
+            if(ids.length === 0) { loadStories(); return; }
             
             try {
                 const res = await fetch('/api', {method: 'POST', body: JSON.stringify({
