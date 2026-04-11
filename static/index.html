@@ -709,6 +709,10 @@
                         .map(c => parseInt(c.value))
                 );
 
+                // Lưu trạng thái check-all để khôi phục sau khi render lại
+                const checkAllEl = document.getElementById('check-all');
+                const prevCheckAll = checkAllEl ? checkAllEl.checked : false;
+
                 // Filter theo nhãn kiểm tra (client-side vì checkCache lưu ở JS)
                 const checkFilter = document.getElementById('check-filter').value;
                 const statusFilter = document.getElementById('status-filter').value;
@@ -890,6 +894,13 @@
                             ck.checked = true;
                         }
                     });
+                }
+
+                // Khôi phục trạng thái check-all — tránh nhảy loạn khi auto-refresh
+                if (checkAllEl && prevCheckAll) {
+                    checkAllEl.checked = true;
+                    // Đảm bảo tất cả checkbox cũng được check lại (vì bảng vừa render lại)
+                    document.querySelectorAll('.story-ck:not(.story-ck-completed)').forEach(c => c.checked = true);
                 }
     
             } catch(e) {
