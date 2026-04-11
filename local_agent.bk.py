@@ -316,107 +316,27 @@ def handle_open_folder(payload, cmd_id):
                          'message': f'Không tìm thấy thư mục. Đã thử: {candidates}'}, 'error')
 
 
-def _scrape_detail_with_driver(driver, url, source='PD'):
-    """Scrape thể loại + mô tả từ trang nguồn dùng Chrome đã mở sẵn.
-    - PD  (truyenphuongdong.com): chờ div.whitespace-pre-line render
-      Thể loại: <p> có <strong>Thể loại:</strong> → các <a>
-      Mô tả:    div.whitespace-pre-line
-    - WIKI (wikicv.net): chờ div.book-desc render
-      Thể loại: div.book-desc > p đầu → các <a>
-      Mô tả:    div.book-desc-detail
-    Trả về dict {'category': str, 'description': str}.
-    """
-    import time as _time
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from bs4 import BeautifulSoup
-
-    category = ''
-    description = ''
-    source = (source or 'PD').upper()
-
-    driver.get(url)
-
-    if source == 'WIKI':
-        try:
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, 'div.book-desc'))
-            )
-        except:
-            _time.sleep(4)
-
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        book_desc = soup.find('div', class_='book-desc')
-        if book_desc:
-            first_p = book_desc.find('p')
-            if first_p:
-                genres = [a.get_text(strip=True) for a in first_p.find_all('a') if a.get_text(strip=True)]
-                category = ', '.join(genres)
-            desc_div = book_desc.find('div', class_='book-desc-detail')
-            if desc_div:
-                description = desc_div.get_text(separator='\n', strip=True)
-    else:
-        try:
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, 'div.whitespace-pre-line'))
-            )
-        except:
-            _time.sleep(4)
-
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        for p_tag in soup.find_all('p'):
-            strong = p_tag.find('strong')
-            if strong and 'Thể loại' in strong.get_text():
-                genres = [a.get_text(strip=True) for a in p_tag.find_all('a') if a.get_text(strip=True)]
-                category = ', '.join(genres)
-                break
-        desc_div = soup.find('div', class_='whitespace-pre-line')
-        if desc_div:
-            description = desc_div.get_text(separator='\n', strip=True)
-
-    return {'category': category, 'description': description}
-
-
-def _save_simple_meta(story_dir, story_id, title, source, url, method='auto_scan',
-                      category='', description=''):
-    """Tạo mới hoặc update meta.json trong thư mục truyện.
-    - Nếu chưa có: tạo mới với đầy đủ các field.
-    - Nếu đã có: chỉ update category và description, giữ nguyên các field khác.
-    Trả về True nếu tạo mới, False nếu update."""
+def _save_simple_meta(story_dir, story_id, title, source, url, method='auto_scan'):
+    """Tạo meta.json đơn giản trong thư mục truyện nếu chưa tồn tại.
+    Trả về True nếu tạo mới, False nếu đã có sẵn."""
     meta_path = os.path.join(story_dir, 'meta.json')
     if os.path.exists(meta_path):
-        try:
-            with open(meta_path, 'r', encoding='utf-8') as f:
-                meta = json.load(f)
-        except Exception:
-            meta = {}
-        meta['category']    = category or ''
-        meta['description'] = description or ''
-        with open(meta_path, 'w', encoding='utf-8') as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
         return False
-    else:
-        meta = {
-            'story_id':       story_id,
-            'original_title': title or '',
-            'source':         (source or 'PD').upper(),
-            'url':            url or '',
-            'method':         method,
-            'category':       category or '',
-            'description':    description or '',
-            'include chuong': '0',
-        }
-        with open(meta_path, 'w', encoding='utf-8') as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
-        return True
+    meta = {
+        'story_id':       story_id,
+        'original_title': title or '',
+        'source':         (source or 'PD').upper(),
+        'url':            url or '',
+        'method':         method,
+        'include chuong': '0',
+    }
+    with open(meta_path, 'w', encoding='utf-8') as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+    return True
 
 
 def handle_generate_meta_all(payload, cmd_id):
-    """Quét tất cả truyện đã craw >= 1 chương trong DB, tạo/update meta.json.
-    - Bỏ qua những file đã có đủ cả category lẫn description.
-    - Mở Chrome 1 lần duy nhất dùng chung cho cả PD lẫn WIKI.
-    """
+    """Quét tất cả truyện đã craw >= 1 chương trong DB, tạo meta.json cho mỗi thư mục tìm thấy."""
     import unicodedata as _ud
 
     def safe_name(t):
@@ -440,18 +360,6 @@ def handle_generate_meta_all(payload, cmd_id):
                 return p
         return None
 
-    def already_complete(story_dir):
-        """Trả về True nếu meta.json đã có đủ category VÀ description."""
-        meta_path = os.path.join(story_dir, 'meta.json')
-        if not os.path.exists(meta_path):
-            return False
-        try:
-            with open(meta_path, 'r', encoding='utf-8') as f:
-                meta = json.load(f)
-            return bool(meta.get('category', '').strip()) and bool(meta.get('description', '').strip())
-        except Exception:
-            return False
-
     # Lấy danh sách truyện từ Vercel API
     try:
         data = _request('GET', '/api?action=list_stories_for_meta')
@@ -460,129 +368,36 @@ def handle_generate_meta_all(payload, cmd_id):
         report_done(cmd_id, {'success': False, 'message': f'Lỗi lấy danh sách: {e}'}, 'error')
         return
 
-    # Lọc trước: chỉ lấy truyện cần xử lý (thiếu category hoặc description)
-    need_process = []
-    skipped = 0
+    created = skipped = errors = 0
     for s in stories:
-        slug  = (s.get('slug') or '').strip()
-        title = (s.get('title') or '').strip()
+        sid    = s.get('id')
+        slug   = (s.get('slug') or '').strip()
+        title  = (s.get('title') or '').strip()
+        source = (s.get('source') or 'PD').upper()
+        url    = s.get('url') or ''
+
         story_dir = find_story_dir(slug, title)
-        s['_dir'] = story_dir
-        if story_dir and already_complete(story_dir):
-            skipped += 1
+        if not story_dir:
+            errors += 1
+            print(f"  [META-ALL] #{sid} {title[:30]} → không tìm thấy thư mục")
             continue
-        need_process.append(s)
 
-    print(f"[META-ALL] Tổng DB: {len(stories)} | Cần xử lý: {len(need_process)} | Bỏ qua (đủ data): {skipped}")
-
-    if not need_process:
-        report_done(cmd_id, {'success': True, 'total': len(stories), 'created': 0, 'skipped': skipped, 'errors': 0})
-        return
-
-    # Mở Chrome 1 lần dùng chung cho tất cả
-    driver = None
-    temp_dir = None
-    try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.service import Service
-        from selenium.webdriver.chrome.options import Options
-        from webdriver_manager.chrome import ChromeDriverManager
-        import tempfile
-
-        options = Options()
-        options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_experimental_option('excludeSwitches', ['enable-automation'])
-        options.add_experimental_option('useAutomationExtension', False)
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--start-maximized')
-        options.add_argument('--disable-notifications')
-        options.add_argument('--blink-settings=imagesEnabled=false')
-        options.add_argument('--log-level=3')
-        temp_dir = tempfile.mkdtemp()
-        options.add_argument(f'--user-data-dir={temp_dir}')
-
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        print("[META-ALL] Chrome khởi động OK")
-    except Exception as e:
-        report_done(cmd_id, {'success': False, 'message': f'Không mở được Chrome: {e}'}, 'error')
-        return
-
-    created = updated = errors = 0
-    error_list = []  # Danh sách truyện bị lỗi để ghi log
-    LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'meta-log.txt')
-
-    try:
-        for s in need_process:
-            sid       = s.get('id')
-            slug      = (s.get('slug') or '').strip()
-            title     = (s.get('title') or '').strip()
-            source    = (s.get('source') or 'PD').upper()
-            url       = s.get('url') or ''
-            story_dir = s.get('_dir')
-
-            if not story_dir:
-                errors += 1
-                error_list.append({'id': sid, 'title': title, 'reason': 'Không tìm thấy thư mục local'})
-                print(f"  [META-ALL] #{sid} {title[:30]} → không tìm thấy thư mục")
-                continue
-            if not url:
-                errors += 1
-                error_list.append({'id': sid, 'title': title, 'reason': 'Không có URL trong DB'})
-                print(f"  [META-ALL] #{sid} {title[:30]} → không có URL")
-                continue
-
-            try:
-                detail = _scrape_detail_with_driver(driver, url, source)
-                is_new = _save_simple_meta(story_dir, sid, title, source, url, method='auto_scan',
-                                           category=detail.get('category', ''),
-                                           description=detail.get('description', ''))
-                if is_new:
-                    created += 1
-                    print(f"  [META-ALL] #{sid} {title[:30]} → tạo mới [{detail.get('category','')[:40]}]")
-                else:
-                    updated += 1
-                    print(f"  [META-ALL] #{sid} {title[:30]} → cập nhật [{detail.get('category','')[:40]}]")
-            except Exception as e:
-                errors += 1
-                error_list.append({'id': sid, 'title': title, 'url': url, 'reason': str(e)})
-                print(f"  [META-ALL] #{sid} {title[:30]} → lỗi: {e}")
-    finally:
         try:
-            driver.quit()
-        except: pass
-        try:
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        except: pass
-
-    # Ghi log ra file
-    try:
-        with open(LOG_PATH, 'w', encoding='utf-8') as f:
-            f.write(f"=== META-ALL LOG === {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Tổng DB: {len(stories)} | Cần xử lý: {len(need_process)} | Bỏ qua (đủ data): {skipped}\n")
-            f.write(f"Kết quả: {created} tạo mới | {updated} cập nhật | {errors} lỗi\n")
-            f.write("\n")
-            if error_list:
-                f.write(f"=== DANH SÁCH LỖI ({len(error_list)} truyện) ===\n")
-                for i, err in enumerate(error_list, 1):
-                    f.write(f"{i}. [ID {err.get('id')}] {err.get('title','')}\n")
-                    f.write(f"   URL   : {err.get('url', '')}\n")
-                    f.write(f"   Lý do : {err.get('reason','')}\n")
+            ok = _save_simple_meta(story_dir, sid, title, source, url, method='auto_scan')
+            if ok:
+                created += 1
+                print(f"  [META-ALL] #{sid} {title[:30]} → tạo meta.json")
             else:
-                f.write("Không có lỗi.\n")
-        print(f"[META-ALL] Log đã ghi: {LOG_PATH}")
-    except Exception as e:
-        print(f"[META-ALL] Không ghi được log: {e}")
+                skipped += 1
+        except Exception as e:
+            errors += 1
+            print(f"  [META-ALL] #{sid} {title[:30]} → lỗi: {e}")
 
-    print(f"[META-ALL] Xong: {created} tạo mới | {updated} cập nhật | {skipped} bỏ qua | {errors} lỗi")
+    print(f"[META-ALL] Xong: {created} tạo mới | {skipped} đã có | {errors} lỗi (total={len(stories)})")
     report_done(cmd_id, {
         'success': True,
         'total':   len(stories),
         'created': created,
-        'updated': updated,
         'skipped': skipped,
         'errors':  errors,
     })

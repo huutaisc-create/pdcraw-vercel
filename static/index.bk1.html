@@ -703,14 +703,11 @@
                 
                 const list = document.getElementById('story-list');
 
-                // Lưu lại TẤT CẢ checkbox đang được tick trước khi render lại
-                const _allCkBefore = document.querySelectorAll('.story-ck');
-                const prevChecked = new Set(
-                    Array.from(document.querySelectorAll('.story-ck:checked'))
+                // Lưu lại các ID của truyện 'completed' đang được tick trước khi render lại
+                const prevCheckedCompleted = new Set(
+                    Array.from(document.querySelectorAll('.story-ck-completed:checked'))
                         .map(c => parseInt(c.value))
                 );
-                // isFirstLoad = bảng chưa có row nào (load lần đầu)
-                const isFirstLoad = _allCkBefore.length === 0;
 
                 // Lưu trạng thái check-all để khôi phục sau khi render lại
                 const checkAllEl = document.getElementById('check-all');
@@ -724,10 +721,9 @@
                     stories = stories.filter(s => checkCache[s.id] && checkCache[s.id].status === checkFilter);
                 }
 
-                // Ẩn truyện đã hoàn thành (completed hoặc tiến độ >=100%) khi "Tất cả trạng thái"
+                // Ẩn truyện đã cào 100% khi đang ở chế độ "Tất cả trạng thái"
                 if (!statusFilter) {
                     stories = stories.filter(s => {
-                        if (s.crawl_status === 'completed') return false;
                         const total = s.chapters || 0;
                         const current = s.downloaded_chapters || 0;
                         const is100 = total > 0 && current >= total;
@@ -755,13 +751,7 @@
                     const pa = STATUS_PRIORITY[a.crawl_status] ?? 5;
                     const pb = STATUS_PRIORITY[b.crawl_status] ?? 5;
                     if (pa !== pb) return pa - pb;
-
-                    // Cùng nhóm → ưu tiên tiến độ cao hơn lên đầu (dang dở nhiều hơn lên trước)
-                    const progA = (a.chapters || 0) > 0 ? (a.downloaded_chapters || 0) / a.chapters : 0;
-                    const progB = (b.chapters || 0) > 0 ? (b.downloaded_chapters || 0) / b.chapters : 0;
-                    if (progB !== progA) return progB - progA;
-
-                    // Cùng tiến độ → id mới hơn lên trên
+                    // Cùng nhóm → id mới hơn lên trên
                     return b.id - a.id;
                 });
 
@@ -782,10 +772,9 @@
     
                     const adminColor = isLocked ? 'bg-red-900/40 text-red-400 border-red-500/30' : 'bg-emerald-900/40 text-emerald-400 border-emerald-500/30';
                     
-                    // Checkbox: lần đầu load thì auto-check theo status.
-                    // Các lần refresh sau: giữ nguyên state người dùng đã tick/bỏ tick.
-                    const autoCheck = ['selected', 'crawling', 'repairing'].includes(s.crawl_status);
-                    const isChecked = isFirstLoad ? autoCheck : prevChecked.has(s.id);
+                    // Checkbox logic: Auto-check chỉ khi đang trong scraper queue
+                    // completed KHÔNG auto-check nhưng vẫn cho phép tick tay để Upload
+                    const isChecked = ['selected', 'crawling', 'repairing'].includes(s.crawl_status);
                     
                     const uploaded = s.uploaded_chapters || 0;
                     const downloaded = s.downloaded_chapters || 0;
@@ -898,10 +887,10 @@
                     list.appendChild(tr);
                 });
 
-                // Restore TẤT CẢ checkbox đã tick trước khi render lại
-                if (!isFirstLoad && prevChecked.size > 0) {
-                    document.querySelectorAll('.story-ck').forEach(ck => {
-                        if (prevChecked.has(parseInt(ck.value))) {
+                // Restore trạng thái tick của các truyện 'completed' sau khi render lại
+                if (prevCheckedCompleted.size > 0) {
+                    document.querySelectorAll('.story-ck-completed').forEach(ck => {
+                        if (prevCheckedCompleted.has(parseInt(ck.value))) {
                             ck.checked = true;
                         }
                     });
@@ -910,6 +899,7 @@
                 // Khôi phục trạng thái check-all — tránh nhảy loạn khi auto-refresh
                 if (checkAllEl && prevCheckAll) {
                     checkAllEl.checked = true;
+                    // Đảm bảo tất cả checkbox cũng được check lại (vì bảng vừa render lại)
                     document.querySelectorAll('.story-ck:not(.story-ck-completed)').forEach(c => c.checked = true);
                 }
     
