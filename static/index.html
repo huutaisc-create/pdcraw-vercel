@@ -711,9 +711,20 @@
 
                 // Filter theo nhãn kiểm tra (client-side vì checkCache lưu ở JS)
                 const checkFilter = document.getElementById('check-filter').value;
+                const statusFilter = document.getElementById('status-filter').value;
                 let stories = data.stories;
                 if (checkFilter) {
                     stories = stories.filter(s => checkCache[s.id] && checkCache[s.id].status === checkFilter);
+                }
+
+                // Ẩn truyện đã cào 100% khi đang ở chế độ "Tất cả trạng thái"
+                if (!statusFilter) {
+                    stories = stories.filter(s => {
+                        const total = s.chapters || 0;
+                        const current = s.downloaded_chapters || 0;
+                        const is100 = total > 0 && current >= total;
+                        return !is100;
+                    });
                 }
 
                 // ── SẮP XẾP: Truyện hoạt động gần đây lên trên, completed xuống cuối ──
@@ -1253,23 +1264,17 @@
             const admin = localStorage.getItem('admin_name');
             if(!admin) {
                 alert("Bạn chưa đăng nhập!");
-                // Revert
                 const ck = document.querySelector(`.story-ck[value="${id}"]`);
                 if(ck) ck.checked = !checked;
                 return;
             }
-            // Optimistic Update (Prevent Lag)
-            // But we reload anyway.
-            
             await fetch('/api', {method: 'POST', body: JSON.stringify({
                 action: 'toggle_select', 
                 id: id, 
                 selected: checked,
                 admin: admin
             })});
-            // loadStories(); // Let user refresh manually? Or auto? 
-            // Better to refresh to confirm lock state.
-            loadStories();
+            // Không gọi loadStories() — checkbox giữ nguyên state, auto-refresh tự cập nhật sau
         }
 
         async function toggleAllPage(checked) {
@@ -1283,10 +1288,10 @@
             const allCheckboxes = document.querySelectorAll('.story-ck');
             const ids = Array.from(document.querySelectorAll('.story-ck:not(.story-ck-completed)')).map(c => parseInt(c.value));
 
-            // Visual feedback cho tất cả (kể cả completed)
+            // Visual feedback ngay lập tức
             allCheckboxes.forEach(c => c.checked = checked);
 
-            if(ids.length === 0) { loadStories(); return; }
+            if(ids.length === 0) return;
             
             try {
                 const res = await fetch('/api', {method: 'POST', body: JSON.stringify({
@@ -1297,10 +1302,10 @@
                 })});
                 const data = await res.json();
                 console.log(data.message);
-                loadStories(); // Refresh to show locks
+                // Không gọi loadStories() — checkbox đã update visual rồi, auto-refresh tự làm phần còn lại
             } catch(e) {
                 alert("Lỗi: " + e);
-                loadStories(); // Revert on error
+                loadStories(); // Chỉ reload khi lỗi để revert
             }
         }
 

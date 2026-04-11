@@ -1,0 +1,2179 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TruyenPhuongDong Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn-cyan { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); transition: all 0.3s ease; }
+        .btn-green { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .btn-orange { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        .btn-red { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+        .status-badge { font-size: 10px; padding: 2px 10px; border-radius: 9999px; font-weight: 800; text-transform: uppercase; border: 1px solid rgba(255,255,255,0.1); }
+        .status-crawling { background-color: #0ea5e9; animation: pulse 2s infinite; }
+        .status-completed { background-color: #10b981; }
+        .status-selected { background-color: #6366f1; }
+        .status-paused { background-color: #f59e0b; border: 1px solid #fff; }
+        .status-error { background-color: #ef4444; }
+        .status-repairing { background-color: #8b5cf6; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- SUPER FORCED LOGIN BUTTON -->
+    <div style="position: fixed; top: 10px; right: 10px; z-index: 999999; background: #ea580c; color: white; padding: 10px 20px; border-radius: 99px; font-weight: bold; cursor: pointer; box-shadow: 0 0 20px rgba(0,0,0,0.5); border: 2px solid white;" 
+         onclick="document.getElementById('modal-login').classList.remove('hidden')">
+        👤 <span id="header-admin-name">LOGIN (CLICK ME)</span>
+    </div>
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-6">
+            <div>
+                <h1 class="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-red-500 mb-2">
+                    PDCraw Admin
+                    <span id="source-badge" style="font-size:0.8rem;vertical-align:middle;margin-left:10px;padding:3px 12px;border-radius:99px;background:rgba(249,115,22,0.2);color:#f97316;border:1px solid rgba(249,115,22,0.3);font-weight:900;letter-spacing:0.05em;">TruyenPD</span>
+                </h1>
+                <div class="flex items-center gap-4">
+                    <nav class="flex gap-6 mt-2">
+                        <button onclick="switchTab('stories')" id="tab-stories" class="text-sm font-bold pb-2 tab-active">TRUYỆN</button>
+                        <button onclick="switchTab('updates')" id="tab-updates" class="text-sm font-bold pb-2 text-slate-500">CHECK UPDATE</button>
+                        <button onclick="switchTab('accounts')" id="tab-accounts" class="text-sm font-bold pb-2 text-slate-500">TÀI KHOẢN</button>
+                    </nav>
+
+                    <div class="px-4 py-1 bg-slate-800 rounded-full border border-slate-700 text-[10px] font-bold text-slate-400 flex gap-3">
+                         <span>HÀNG ĐỢI: <span id="stat-queue" class="text-white">0</span></span>
+                         <span class="w-px h-3 bg-slate-600"></span>
+                         <span>ĐANG CHẠY: <span id="stat-run" class="text-white">0</span></span>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+
+        <div id="view-stories">
+            <!-- Discovery Input -->
+            <!-- Discovery V2 Input -->
+            <div class="glass p-6 rounded-2xl mb-8 border border-orange-500/20 shadow-[0_0_20px_rgba(249,115,22,0.1)] relative overflow-hidden">
+                <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                     <svg width="100" height="100" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                </div>
+                <label class="block text-xs font-bold text-orange-500 mb-3 uppercase tracking-widest flex items-center gap-2">
+                    <span class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                    Smart Discovery / Nhập Link:
+                </label>
+                <div class="flex gap-3 items-stretch">
+                    <div class="relative w-32 shrink-0">
+                         <select id="discovery-source" onchange="switchSource(this.value)" class="w-full h-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 outline-none focus:border-orange-500 text-xs font-bold text-orange-400 appearance-none">
+                             <option value="PD">TruyenPD</option>
+                             <option value="WIKI">WikiCV</option>
+                         </select>
+                         <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">▼</div>
+                    </div>
+                    <input type="text" id="discovery-url" placeholder="Paste link truyện hoặc trang lọc (VD: .../truyen/ten-truyen)" 
+                        class="flex-grow bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 outline-none focus:border-orange-500 transition-all font-mono text-sm text-white placeholder-slate-600">
+                    <button onclick="submitDiscovery()" id="btn-discovery" class="btn-green px-8 font-black uppercase tracking-widest text-xs rounded-lg shadow-emerald-900/40 hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                        <span>Quét</span>
+                        <div id="discovery-spinner" class="hidden w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    </button>
+                    <button onclick="cancelAllPending()" title="Dừng & xóa toàn bộ lệnh đang chờ trong hàng đợi" class="btn-red px-4 font-black uppercase tracking-widest text-xs rounded-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-1">
+                        <span>✕</span><span>Clear</span>
+                    </button>
+                </div>
+                <div id="discovery-status" class="mt-2 text-[10px] font-mono text-slate-500 h-4"></div>
+            </div>
+
+            <!-- List Stories -->
+            <div class="glass rounded-2xl overflow-hidden border border-white/5">
+                <!-- Toolbar -->
+                <div class="p-4 bg-slate-800/50 border-b border-white/5 space-y-4">
+                    <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div class="flex gap-2 items-center flex-wrap">
+                             <input type="text" id="search" placeholder="Tìm tên truyện..." class="bg-slate-900 border border-slate-700 rounded px-4 py-1.5 text-xs outline-none focus:border-orange-500 w-48" onkeyup="if(event.key==='Enter') loadStories()">
+                             <select id="category-filter" class="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs outline-none max-w-[150px]" onchange="loadStories()">
+                                <option value="">Tất cả thể loại</option>
+                             </select>
+                             <select id="book-status-filter" class="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs outline-none" onchange="loadStories()">
+                                <option value="">Tất cả tiến độ</option>
+                                <option value="Full">Full (Đã hoàn thành)</option>
+                                <option value="Ongoing">Ongoing (Chưa xong)</option>
+                             </select>
+                             <select id="status-filter" class="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs outline-none" onchange="loadStories()">
+                                <option value="">Tất cả trạng thái</option>
+                                <option value="pending">Chưa cào</option>
+                                <option value="selected">Chờ cào</option>
+                                <option value="crawling">Đang cào</option>
+                                <option value="completed">Đã xong</option>
+                                <option value="repairing">Repairing</option>
+                                <option value="error">Lỗi</option>
+                            </select>
+                             <select id="check-filter" class="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs outline-none text-amber-400 font-bold" onchange="loadStories()">
+                                <option value="" class="text-slate-400 font-normal">Tất cả nhãn</option>
+                                <option value="warn">⚠ Cần kiểm tra</option>
+                                <option value="error">❌ Lỗi nghiêm trọng</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-2 items-center flex-wrap lg:justify-end mt-2 md:mt-0">
+                            <div class="flex items-center gap-2 mr-2 bg-slate-900 rounded border border-slate-700 px-3 py-1.5 h-full whitespace-nowrap">
+                                 <span class="text-[10px] text-slate-500 font-extrabold">LUỒNG:</span>
+                                 <input type="number" id="threads" value="1" min="1" max="50" class="w-6 bg-transparent text-center font-bold text-orange-400 outline-none text-xs">
+                            </div>
+                            <button onclick="startScraper()" class="whitespace-nowrap bg-orange-500 hover:bg-orange-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-orange-500/20 transition-all active:scale-95">START SCRAPER</button>
+                            <button id="btn-stop" onclick="killScrapers()" class="whitespace-nowrap bg-red-500 hover:bg-red-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-red-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span id="btn-stop-icon">⏹</span><span id="btn-stop-label">STOP</span>
+                            </button>
+                            <button id="btn-sync" onclick="syncSelected()" class="whitespace-nowrap bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-indigo-500/20 transition-all active:scale-95">SYNC SELECTED</button>
+                            <button id="btn-missing" onclick="crawlMissing()" class="whitespace-nowrap bg-purple-500 hover:bg-purple-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-purple-500/20 transition-all active:scale-95">CRAWL MISSING</button>
+                            <button id="btn-change-status" onclick="openChangeStatusModal()" class="whitespace-nowrap bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-yellow-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>🏷</span><span>ĐỔI TRẠNG THÁI</span>
+                            </button>
+                            <button onclick="openChangeMachineModal()" class="whitespace-nowrap bg-blue-700 hover:bg-blue-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>🖥️</span><span>ĐỔI MÁY</span>
+                            </button>
+                            <button onclick="resetBot()" class="whitespace-nowrap bg-slate-600 hover:bg-slate-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>🤖</span><span>RESET BOT</span>
+                            </button>
+                            <button onclick="resetCrawlingAll()" class="whitespace-nowrap bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-cyan-500/20 transition-all active:scale-95 flex items-center gap-1.5 border border-cyan-400">
+                                <span>🛠️</span><span>GIẢI CỨU KẸT TRUYỆN</span>
+                            </button>
+                            <button onclick="deleteStories()" class="whitespace-nowrap bg-red-900 hover:bg-red-800 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg transition-all active:scale-95 flex items-center gap-1.5 border border-red-700">
+                                <span>🗑</span><span>XÓA TRUYỆN</span>
+                            </button>
+                            <button onclick="deleteMenuMap()" class="whitespace-nowrap bg-rose-800 hover:bg-rose-700 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>🗑</span><span>XÓA MENU MAP</span>
+                            </button>
+                            <button id="btn-check-upload" onclick="openCheckUploadModal()" class="whitespace-nowrap bg-teal-600 hover:bg-teal-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-teal-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>⬆</span><span>CHECK & UPLOAD</span>
+                            </button>
+                            <button onclick="openImportLocalModal()" class="whitespace-nowrap bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-emerald-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>📁</span><span>NHẬP DATA LOCAL</span>
+                            </button>
+                            <button onclick="generateMeta()" class="whitespace-nowrap bg-violet-700 hover:bg-violet-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-violet-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>📝</span><span>LẤY META</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Legend -->
+                    <div class="flex gap-2 flex-wrap items-center text-[10px] text-slate-400">
+                        <span class="uppercase font-bold mr-2 text-slate-600">Chú thích:</span>
+                        <span class="status-badge status-crawling">Đang cào</span>
+                        <span class="status-badge status-paused">Tạm dừng</span>
+                        <span class="status-badge status-selected">Chờ cào</span>
+                        <span class="status-badge status-completed">Đã xong</span>
+                        <span class="status-badge status-error">Lỗi</span>
+                        <span class="status-badge status-repairing">Repairing</span>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-900/80 text-[10px] uppercase font-black text-slate-500">
+                            <tr>
+                                <th class="p-4 w-16 text-center">
+                                    <div class="flex flex-col items-center gap-1">
+                                        <span>ID</span>
+                                        <input type="checkbox" id="check-all" class="w-3 h-3 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500 cursor-pointer" onchange="toggleAllPage(this.checked)">
+                                    </div>
+                                </th>
+                                <th class="p-4">Truyện</th>
+                                <th class="p-4 w-24 text-center">User</th>
+                                <th class="p-4">Tiến độ (Web)</th>
+                                <th class="p-4">Thực tế (File)</th>
+                                <th class="p-4">Upload Web</th>
+                                <th class="p-4 text-center w-16">Máy</th>
+                                <th class="p-4 text-center">Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody id="story-list" class="text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="mt-4 flex justify-between items-center text-[11px] font-bold text-slate-500">
+                <span id="story-stats">0 truyện</span>
+                <div class="flex gap-2 items-center">
+                    <button onclick="changePage(-1)" class="px-4 py-1 glass rounded hover:bg-slate-700">PREV</button>
+                    <span id="page-num" class="bg-slate-800 px-3 py-1 rounded text-orange-400 text-center min-w-[30px]">1</span>
+                    <button onclick="changePage(1)" class="px-4 py-1 glass rounded hover:bg-slate-700">NEXT</button>
+                    <span class="text-slate-600 mx-1">|</span>
+                    <span class="text-slate-600">Trang:</span>
+                    <input type="number" id="jump-page" min="1" class="w-14 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-center text-orange-400 font-bold outline-none focus:border-orange-500 text-xs"
+                        onkeyup="if(event.key==='Enter'){ const p=parseInt(this.value); if(p>=1&&p<=totalPages){curPage=p;loadStories();} }"
+                        placeholder="...">
+                    <button onclick="const p=parseInt(document.getElementById('jump-page').value); if(p>=1&&p<=totalPages){curPage=p;loadStories();}" class="px-3 py-1 glass rounded hover:bg-slate-700 text-xs">GO</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-accounts" class="hidden">
+             <div class="glass p-6 rounded-2xl">
+                <h3 class="text-xs font-black uppercase text-orange-500 mb-4 tracking-widest">Danh sách tài khoản (<span id="accounts-source-label">accounts.txt</span>)</h3>
+                <p class="text-[10px] text-slate-400 mb-4">File: <span id="accounts-file-label">accounts.txt</span></p>
+                <div class="bg-slate-900 p-4 rounded font-mono text-xs text-slate-300 whitespace-pre-line" id="account-content">
+                    Loading...
+                </div>
+             </div>
+        </div>
+
+        <div id="view-updates" class="hidden">
+            <div class="glass p-6 rounded-2xl mb-8 border border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.1)]">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                         <h2 class="text-lg font-bold text-blue-400 uppercase tracking-widest">Kiểm tra Chương Mới</h2>
+                         <p class="text-xs text-slate-500">Quét các truyện chưa hoàn thành (Ongoing) để tìm chương mới.</p>
+                    </div>
+                    <button onclick="scanUpdates()" id="btn-scan-update" class="px-6 py-2 bg-blue-600 hover:bg-blue-500 rounded font-bold text-xs shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex gap-2 items-center">
+                        <span>SCAN NOW / QUÉT NGAY</span>
+                        <div id="scan-spinner" class="hidden w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    </button>
+                </div>
+                <div id="scan-status" class="text-xs font-mono text-slate-400 mb-4 h-5"></div>
+                
+                <div class="overflow-hidden rounded-lg border border-white/5 bg-slate-900/50">
+                     <table class="w-full text-left text-xs">
+                         <thead class="bg-slate-900 text-slate-500 uppercase font-bold">
+                             <tr>
+                                 <th class="p-3 w-10"><input type="checkbox" onchange="toggleAllUpdates(this.checked)"></th>
+                                 <th class="p-3">Truyện</th>
+                                 <th class="p-3">Hiện tại (DB)</th>
+                                 <th class="p-3 text-green-400">Mới nhất (Web)</th>
+                                 <th class="p-3 text-center">Tình trạng</th>
+                             </tr>
+                         </thead>
+                         <tbody id="update-list" class="text-slate-300 font-mono">
+                             <!-- Items -->
+                         </tbody>
+                     </table>
+                     <div id="update-empty" class="p-8 text-center text-slate-500 italic hidden">Chưa có kết quả quét. Bấm nút SCAN để bắt đầu.</div>
+                </div>
+                
+                <div class="mt-4 flex justify-end">
+                    <button onclick="addUpdateQueue()" id="btn-queue-update" class="hidden px-6 py-3 bg-green-600 hover:bg-green-500 rounded font-bold text-xs shadow-lg shadow-green-500/20 transition-all active:scale-95">
+                        ĐẨY VÀO HÀNG ĐỢI (QUEUE SELECTED)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conflict Modal -->
+        <div id="modal-conflicts" class="fixed inset-0 bg-black/90 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+            <div class="bg-slate-900 p-8 rounded-2xl max-w-4xl w-full border border-orange-500/50 shadow-[0_0_50px_rgba(249,115,22,0.2)] transform transition-all scale-100">
+                 <div class="flex items-center gap-4 mb-6">
+                     <div class="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center text-2xl">⚠️</div>
+                     <div>
+                         <h2 class="text-2xl font-bold text-orange-500">Phát hiện trùng lặp</h2>
+                         <p class="text-slate-400 text-xs">Các truyện sau đã tồn tại. Bạn có muốn cập nhật thông tin mới (Số chương/Nguồn) không?</p>
+                     </div>
+                 </div>
+                 
+                 <div class="max-h-[50vh] overflow-y-auto mb-6 bg-slate-950/50 p-4 rounded border border-white/5">
+                     <table class="w-full text-left text-xs">
+                         <thead class="text-slate-500 uppercase font-bold border-b border-white/5">
+                             <tr>
+                                 <th class="p-2"><input type="checkbox" onchange="toggleAllConflicts(this.checked)"></th>
+                                 <th class="p-2">Truyện (Slug)</th>
+                                 <th class="p-2">Nguồn Cũ (Chap)</th>
+                                 <th class="p-2 text-green-400">Nguồn Mới (Chap)</th>
+                             </tr>
+                         </thead>
+                         <tbody id="conflict-list" class="text-slate-300 font-mono"></tbody>
+                     </table>
+                 </div>
+                 
+                 <div class="flex justify-end gap-3 items-center">
+                     <span class="text-xs text-slate-500 mr-auto italic" id="conflict-count-msg"></span>
+                     <button onclick="closeModal('modal-conflicts')" class="px-6 py-2 rounded font-bold text-slate-400 hover:text-white transition-colors">Bỏ qua tất cả</button>
+                     <button onclick="confirmOverwrite()" id="btn-overwrite" class="btn-orange px-6 py-2 rounded font-bold text-white shadow-lg shadow-orange-500/20 flex gap-2 items-center">
+                         <span>Cập nhật (Overwrite)</span>
+                     </button>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- CHECK & UPLOAD MODAL                                        -->
+    <!-- ============================================================ -->
+    <div id="modal-check-upload" class="fixed inset-0 bg-black/90 hidden flex items-start justify-center z-50 backdrop-blur-sm overflow-y-auto">
+        <div class="bg-slate-900 rounded-none md:rounded-2xl w-full min-h-screen md:min-h-0 md:my-4 md:max-w-6xl border-0 md:border border-teal-500/40 shadow-[0_0_60px_rgba(20,184,166,0.15)] md:mx-4 flex flex-col">
+            
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-6 border-b border-white/5">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 bg-teal-500/20 rounded-full flex items-center justify-center text-xl">⬆</div>
+                    <div>
+                        <h2 class="text-xl font-bold text-teal-400">Kiểm Tra & Upload Lên Web</h2>
+                        <p class="text-slate-500 text-xs mt-0.5" id="cu-subtitle">Chọn truyện trên danh sách rồi nhấn CHECK & UPLOAD</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('modal-check-upload')" class="text-slate-500 hover:text-white text-2xl leading-none transition-colors">✕</button>
+            </div>
+
+            <!-- Config Bar -->
+            <div class="flex flex-wrap items-center gap-4 px-6 py-3 bg-slate-800/40 border-b border-white/5">
+                <div class="flex items-center gap-2">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Batch size:</label>
+                    <input type="number" id="cu-batch-size" value="50" min="10" max="200"
+                        class="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-bold text-teal-400 outline-none focus:border-teal-500 text-center">
+                    <span class="text-[10px] text-slate-500">chương/lần</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ngưỡng lỗi nội dung:</label>
+                    <input type="number" id="cu-min-chars" value="500" min="50" max="5000"
+                        class="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-bold text-teal-400 outline-none focus:border-teal-500 text-center">
+                    <span class="text-[10px] text-slate-500">ký tự</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Web App URL:</label>
+                    <input type="text" id="cu-web-url" value="http://localhost:3000"
+                        class="w-52 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-teal-400 outline-none focus:border-teal-500">
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Secret Key:</label>
+                    <input type="password" id="cu-secret" placeholder="X-Upload-Secret"
+                        class="w-36 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-400 outline-none focus:border-teal-500">
+                </div>
+            </div>
+
+            <!-- Story List to check -->
+            <div class="px-6 pt-4 pb-2">
+                <div id="cu-story-list" class="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+                    <div class="text-center text-slate-500 text-xs italic py-6">Nhấn CHECK để bắt đầu kiểm tra...</div>
+                </div>
+            </div>
+
+            <!-- Summary Stats Bar -->
+            <div id="cu-summary" class="hidden mx-6 my-3 grid grid-cols-4 gap-3">
+                <div class="bg-slate-800 rounded-lg p-3 text-center border border-white/5">
+                    <div class="text-xl font-black text-white" id="cu-stat-total">0</div>
+                    <div class="text-[10px] text-slate-500 uppercase font-bold mt-0.5">Tổng truyện</div>
+                </div>
+                <div class="bg-slate-800 rounded-lg p-3 text-center border border-white/5">
+                    <div class="text-xl font-black text-green-400" id="cu-stat-ok">0</div>
+                    <div class="text-[10px] text-slate-500 uppercase font-bold mt-0.5">Sẵn sàng</div>
+                </div>
+                <div class="bg-amber-900/30 rounded-lg p-3 text-center border border-amber-500/20">
+                    <div class="text-xl font-black text-amber-400" id="cu-stat-warn">0</div>
+                    <div class="text-[10px] text-slate-500 uppercase font-bold mt-0.5">Cảnh báo</div>
+                </div>
+                <div class="bg-red-900/30 rounded-lg p-3 text-center border border-red-500/20">
+                    <div class="text-xl font-black text-red-400" id="cu-stat-err">0</div>
+                    <div class="text-[10px] text-slate-500 uppercase font-bold mt-0.5">Lỗi nghiêm trọng</div>
+                </div>
+            </div>
+
+            <!-- Upload Progress -->
+            <div id="cu-upload-progress" class="hidden px-6 py-3">
+                <div class="flex justify-between text-[10px] font-bold text-slate-400 mb-1.5 uppercase tracking-widest">
+                    <span id="cu-progress-label">Đang upload...</span>
+                    <span id="cu-progress-pct">0%</span>
+                </div>
+                <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="cu-progress-bar" class="h-full bg-gradient-to-r from-teal-600 to-teal-400 transition-all duration-300 shadow-[0_0_10px_rgba(20,184,166,0.5)]" style="width:0%"></div>
+                </div>
+                <div id="cu-progress-log" class="mt-2 text-[10px] font-mono text-slate-500 max-h-40 overflow-y-auto space-y-0.5"></div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-between gap-3 p-6 border-t border-white/5">
+                <div class="text-[10px] text-slate-500 italic" id="cu-status-msg"></div>
+                <div class="flex gap-3">
+                    <button id="btn-save-check" onclick="saveCheckCache(); loadStories();" class="hidden px-5 py-2 rounded font-bold text-teal-400 hover:text-teal-300 border border-teal-700 hover:bg-teal-900/30 transition-all text-xs">
+                        💾 Lưu kết quả
+                    </button>
+                    <button onclick="closeModal('modal-check-upload')" class="px-5 py-2 rounded font-bold text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 transition-all text-xs">
+                        ✕ Hủy
+                    </button>
+                    <button id="btn-do-check" onclick="doCheckContent()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 rounded font-bold text-white text-xs shadow-lg shadow-indigo-500/20 transition-all active:scale-95 flex items-center gap-2">
+                        <span>🔍</span><span>CHECK LẠI</span>
+                        <div id="cu-check-spinner" class="hidden w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    </button>
+                    <button id="btn-do-upload-warn" onclick="doUpload(true)" class="hidden px-6 py-2 bg-amber-600 hover:bg-amber-500 rounded font-bold text-white text-xs shadow-lg shadow-amber-500/20 transition-all active:scale-95">
+                        ⚠ Vẫn Upload (bỏ qua lỗi)
+                    </button>
+                    <button id="btn-do-upload-ok" onclick="doUpload(false)" class="hidden px-6 py-2 bg-teal-600 hover:bg-teal-500 rounded font-bold text-white text-xs shadow-lg shadow-teal-500/20 transition-all active:scale-95">
+                        ✅ Upload
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Status Modal -->
+    <div id="modal-change-status" class="fixed inset-0 bg-black/90 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-slate-900 p-8 rounded-2xl w-full max-w-sm border border-yellow-500/40 shadow-[0_0_50px_rgba(234,179,8,0.15)]">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-yellow-500/20 rounded-full flex items-center justify-center text-xl">🏷</div>
+                <div>
+                    <h2 class="text-lg font-bold text-yellow-400">Đổi Trạng Thái</h2>
+                    <p class="text-slate-500 text-xs mt-0.5" id="cs-subtitle">Chọn trạng thái muốn chuyển</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mb-6">
+                <button onclick="applyChangeStatus('pending')"   class="cs-opt py-3 rounded-lg font-bold text-xs border border-slate-700 bg-slate-800 hover:border-slate-400 text-slate-300 transition-all active:scale-95">⬜ pending</button>
+                <button onclick="applyChangeStatus('selected')"  class="cs-opt py-3 rounded-lg font-bold text-xs border border-indigo-700 bg-indigo-900/40 hover:border-indigo-400 text-indigo-300 transition-all active:scale-95">🟣 selected</button>
+                <button onclick="applyChangeStatus('crawling')"  class="cs-opt py-3 rounded-lg font-bold text-xs border border-sky-700 bg-sky-900/40 hover:border-sky-400 text-sky-300 transition-all active:scale-95">🔵 crawling</button>
+                <button onclick="applyChangeStatus('paused')"    class="cs-opt py-3 rounded-lg font-bold text-xs border border-yellow-700 bg-yellow-900/40 hover:border-yellow-400 text-yellow-300 transition-all active:scale-95">🟡 paused</button>
+                <button onclick="applyChangeStatus('completed')" class="cs-opt py-3 rounded-lg font-bold text-xs border border-green-700 bg-green-900/40 hover:border-green-400 text-green-300 transition-all active:scale-95">🟢 completed</button>
+                <button onclick="applyChangeStatus('error')"     class="cs-opt py-3 rounded-lg font-bold text-xs border border-red-700 bg-red-900/40 hover:border-red-400 text-red-300 transition-all active:scale-95">🔴 error</button>
+                <button onclick="applyChangeStatus('repairing')" class="cs-opt py-3 rounded-lg font-bold text-xs border border-purple-700 bg-purple-900/40 hover:border-purple-400 text-purple-300 transition-all active:scale-95 col-span-2">🟤 repairing</button>
+            </div>
+            <button onclick="closeModal('modal-change-status')" class="w-full py-2 rounded text-slate-500 hover:text-white text-xs font-bold transition-colors">Huỷ</button>
+        </div>
+    </div>
+
+    <!-- Modal Đổi Máy -->
+    <div id="modal-change-machine" class="fixed inset-0 bg-black/90 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-slate-900 p-8 rounded-2xl w-full max-w-sm border border-blue-500/40 shadow-[0_0_50px_rgba(59,130,246,0.15)]">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center text-xl">🖥️</div>
+                <div>
+                    <h2 class="text-lg font-bold text-blue-400">Đổi Máy Lưu Trữ</h2>
+                    <p class="text-slate-500 text-xs mt-0.5" id="cm-subtitle">Chọn đường dẫn muốn chuyển sang</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mb-4">
+                <button onclick="applyChangeMachine('A')" class="py-4 rounded-lg font-black text-lg border border-blue-700 bg-blue-900/40 hover:border-blue-400 hover:bg-blue-800/60 text-blue-300 transition-all active:scale-95">A</button>
+                <button onclick="applyChangeMachine('B')" class="py-4 rounded-lg font-black text-lg border border-green-700 bg-green-900/40 hover:border-green-400 hover:bg-green-800/60 text-green-300 transition-all active:scale-95">B</button>
+                <button onclick="applyChangeMachine('C')" class="py-4 rounded-lg font-black text-lg border border-yellow-700 bg-yellow-900/40 hover:border-yellow-400 hover:bg-yellow-800/60 text-yellow-300 transition-all active:scale-95">C</button>
+                <button onclick="applyChangeMachine('D')" class="py-4 rounded-lg font-black text-lg border border-purple-700 bg-purple-900/40 hover:border-purple-400 hover:bg-purple-800/60 text-purple-300 transition-all active:scale-95">D</button>
+                <button onclick="applyChangeMachine('E')" class="py-4 rounded-lg font-black text-lg border border-pink-700 bg-pink-900/40 hover:border-pink-400 hover:bg-pink-800/60 text-pink-300 transition-all active:scale-95">E</button>
+                <button onclick="applyChangeMachine(null)" class="py-4 rounded-lg font-black text-sm border border-slate-600 bg-slate-800 hover:border-slate-400 text-slate-400 transition-all active:scale-95">Xoá</button>
+            </div>
+            <p class="text-[10px] text-slate-600 text-center mb-4">⚠ "Xoá" = reset về NULL — máy nào cũng có thể crawl lại</p>
+            <button onclick="closeModal('modal-change-machine')" class="w-full py-2 rounded text-slate-500 hover:text-white text-xs font-bold transition-colors">Huỷ</button>
+        </div>
+    </div>
+
+    <!-- Import Local Data Modal -->
+    <div id="modal-import-local" class="fixed inset-0 bg-black/90 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+        <div class="glass p-6 rounded-2xl w-full max-w-md border border-emerald-500/30 shadow-[0_0_60px_rgba(16,185,129,0.1)]">
+            <h3 class="text-lg font-bold text-emerald-400 mb-4">📁 Ghi nhận data local</h3>
+            <p class="text-slate-400 text-xs mb-1">Truyện đã chọn: <span id="import-local-title" class="text-white font-bold"></span></p>
+            <p class="text-slate-400 text-xs mb-2">Tên thư mục trong <code class="text-emerald-300">data_import/</code>:</p>
+            <input id="import-local-folder" type="text" placeholder="ten-thu-muc-truyen"
+                class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mb-3 focus:outline-none focus:border-emerald-500" />
+            <p class="text-slate-400 text-xs mb-2">Máy lưu trữ:</p>
+            <select id="import-local-machine" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-emerald-500">
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+                <option value="E">E</option>
+            </select>
+            <div class="flex gap-3">
+                <button onclick="doImportLocalData()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-sm transition-all active:scale-95">Ghi nhận</button>
+                <button onclick="document.getElementById('modal-import-local').classList.add('hidden')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded text-sm transition-all active:scale-95">Huỷ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="modal-login" class="fixed inset-0 bg-black/95 flex flex-col items-center justify-center z-[100] backdrop-blur-md hidden">
+        <div class="glass p-8 rounded-2xl w-full max-w-md border border-orange-500/30 text-center shadow-[0_0_100px_rgba(249,115,22,0.1)]">
+             <div class="w-16 h-16 bg-orange-500/10 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 text-orange-500">👤</div>
+             <h2 class="text-2xl font-black text-orange-500 uppercase tracking-widest mb-2">Web Admin Login</h2>
+             <p class="text-slate-500 text-xs mb-6">Nhập tên định danh của bạn để bắt đầu quản lý.</p>
+             
+             <input type="text" id="admin-name-input" class="w-full bg-slate-900 border border-white/10 rounded p-3 text-center text-white font-bold mb-4 focus:border-orange-500 focus:outline-none placeholder-slate-600" placeholder="Ví dụ: Admin Huy, Admin Laptop...">
+
+             <div class="mb-4">
+                 <label class="block text-xs text-slate-500 mb-2 text-left font-bold uppercase tracking-widest">Đường dẫn lưu trữ (Máy này là máy nào?)</label>
+                 <select id="machine-label-input" class="w-full bg-slate-900 border border-white/10 rounded p-3 text-white font-bold focus:border-orange-500 focus:outline-none" style="appearance:none;">
+                     <option value="">-- Chọn đường dẫn --</option>
+                     <option value="A">📁 Đường dẫn A</option>
+                     <option value="B">📁 Đường dẫn B</option>
+                     <option value="C">📁 Đường dẫn C</option>
+                     <option value="D">📁 Đường dẫn D</option>
+                     <option value="E">📁 Đường dẫn E</option>
+                 </select>
+             </div>
+
+             <button onclick="doLogin()" class="w-full py-3 bg-orange-600 hover:bg-orange-500 rounded font-bold text-white shadow-lg shadow-orange-500/20 active:scale-95 transition-all">
+                 XÁC NHẬN (ENTER)
+             </button>
+        </div>
+        <p class="mt-4 text-xs text-slate-600">Distributed Scraping System v2.0</p>
+    </div>
+
+    <script>
+        let curPage = 1;
+        let totalPages = 1;
+        let currentTab = 'stories';
+
+        // ─── MACHINE LABEL ─────────────────────────────────────────────────
+        const MACHINE_COLORS = {
+            'A': 'background:#1d4ed8;color:#bfdbfe;border-color:#3b82f6',
+            'B': 'background:#065f46;color:#a7f3d0;border-color:#10b981',
+            'C': 'background:#92400e;color:#fde68a;border-color:#f59e0b',
+            'D': 'background:#5b21b6;color:#ddd6fe;border-color:#8b5cf6',
+            'E': 'background:#9d174d;color:#fbcfe8;border-color:#ec4899',
+        };
+        function machineLabelStyle(label) {
+            return MACHINE_COLORS[label] || 'background:#1e293b;color:#94a3b8;border-color:#475569';
+        }
+
+        async function openFolder(btn) {
+            const slug  = btn.dataset.slug  || '';
+            const title = btn.dataset.title || '';
+            const admin = localStorage.getItem('admin_name');
+            if (!admin) return alert('Bạn chưa đăng nhập!');
+            try {
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'open_folder', slug, title, admin})
+                });
+                const data = await res.json();
+                if (!data.success) { showToast('❌ ' + (data.message || 'Lỗi'), 'red'); return; }
+                const cmdId = data.command_id;
+                if (!cmdId) return;
+                // Poll kết quả từ agent
+                for (let i = 0; i < 10; i++) {
+                    await new Promise(r => setTimeout(r, 800));
+                    const r2 = await fetch(`/api?action=get_command_result&command_id=${cmdId}`);
+                    const d2 = await r2.json();
+                    if (d2.status === 'done') {
+                        const result = d2.result || {};
+                        if (result.success) showToast('📂 Đã mở: ' + (result.path || slug), 'green');
+                        else showToast('❌ ' + (result.message || 'Không mở được'), 'red');
+                        return;
+                    }
+                    if (d2.status === 'error') {
+                        showToast('❌ ' + (d2.result?.message || 'Lỗi'), 'red'); return;
+                    }
+                }
+                showToast('⚠️ Agent không phản hồi — thử restart local_agent', 'red');
+            } catch(e) {
+                showToast('❌ Lỗi: ' + e.message, 'red');
+            }
+        }
+
+        // ─── GENERATE META ──────────────────────────────────────────────────
+        async function generateMeta() {
+            const admin = localStorage.getItem('admin_name');
+            if (!admin) return alert('Bạn chưa đăng nhập!');
+
+            showToast('📝 Đang tạo meta.json cho tất cả truyện đã craw...', 'blue');
+
+            try {
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'generate_meta_all', admin})
+                });
+                const data = await res.json();
+                if (!data.success && !data.command_id) {
+                    showToast('❌ ' + (data.message || 'Lỗi'), 'red'); return;
+                }
+                const cmdId = data.command_id;
+                if (!cmdId) { showToast('❌ Không lấy được command_id', 'red'); return; }
+
+                showToast(`📝 Đã gửi lệnh (id=${cmdId}), đang chờ agent...`, 'blue');
+                for (let i = 0; i < 120; i++) {
+                    await new Promise(r => setTimeout(r, 3000));
+                    const r2 = await fetch(`/api?action=get_command_result&command_id=${cmdId}`);
+                    const d2 = await r2.json();
+                    if (d2.status === 'done') {
+                        const result = d2.result || {};
+                        showToast(
+                            `✅ META xong: ${result.created ?? 0} tạo mới | ${result.skipped ?? 0} đã có | ${result.errors ?? 0} lỗi`,
+                            'green'
+                        );
+                        return;
+                    }
+                    if (d2.status === 'error') {
+                        showToast('❌ ' + (d2.result?.message || 'Agent báo lỗi'), 'red'); return;
+                    }
+                }
+                showToast('⚠️ Timeout — agent chạy quá lâu hoặc không phản hồi', 'red');
+            } catch(e) {
+                showToast('❌ Lỗi: ' + e.message, 'red');
+            }
+        }
+
+        // ─── SOURCE SWITCHING ───────────────────────────────────────────────
+        let currentSource = localStorage.getItem('current_source') || 'PD';
+        const SOURCE_STYLES = {
+            'PD':   { label: 'TruyenPD', color: '#f97316', badgeBg: 'rgba(249,115,22,0.2)',  border: 'rgba(249,115,22,0.3)' },
+            'WIKI': { label: 'WikiCV',   color: '#3b82f6', badgeBg: 'rgba(59,130,246,0.2)',  border: 'rgba(59,130,246,0.3)' },
+        };
+
+        function applySourceStyle(src) {
+            const style = SOURCE_STYLES[src] || SOURCE_STYLES['PD'];
+            const badge = document.getElementById('source-badge');
+            if (badge) {
+                badge.innerText = style.label;
+                badge.style.color = style.color;
+                badge.style.background = style.badgeBg;
+                badge.style.borderColor = style.border;
+            }
+            const sel = document.getElementById('discovery-source');
+            if (sel) sel.value = src;
+        }
+
+        function switchSource(src) {
+            currentSource = src;
+            localStorage.setItem('current_source', src);
+            curPage = 1;
+            applySourceStyle(src);
+            // Reset category filter before reload
+            const catSel = document.getElementById('category-filter');
+            if (catSel) catSel.value = '';
+            loadCategories();
+            loadStories();
+            // Reload accounts nếu đang ở tab TÀI KHOẢN
+            if (currentTab === 'accounts') loadAccounts();
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.getElementById('view-stories').classList.toggle('hidden', tab !== 'stories');
+            document.getElementById('view-accounts').classList.toggle('hidden', tab !== 'accounts');
+            document.getElementById('view-updates').classList.toggle('hidden', tab !== 'updates');
+            
+            document.getElementById('tab-stories').classList.toggle('tab-active', tab === 'stories');
+            document.getElementById('tab-stories').classList.toggle('text-slate-500', tab !== 'stories');
+            
+            document.getElementById('tab-accounts').classList.toggle('tab-active', tab === 'accounts');
+            document.getElementById('tab-accounts').classList.toggle('text-slate-500', tab !== 'accounts');
+            
+            document.getElementById('tab-updates').classList.toggle('tab-active', tab === 'updates');
+            document.getElementById('tab-updates').classList.toggle('text-slate-500', tab !== 'updates');
+            
+            if (tab === 'accounts') loadAccounts();
+            else if (tab === 'stories') loadStories();
+            else if (tab === 'updates') loadUpdateList();
+        }
+        
+        async function loadCategories() {
+            const res = await fetch('/api?action=get_categories&source=' + currentSource);
+            const data = await res.json();
+            const select = document.getElementById('category-filter');
+            // Clear old options (keep the first "Tất cả" option)
+            while (select.options.length > 1) select.remove(1);
+            data.categories.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c;
+                opt.innerText = c;
+                select.appendChild(opt);
+            });
+        }
+
+        // ── HELPER: fetch có timeout 15s để không treo mãi ──────────────────
+        async function _fetchAPI(url, opts = {}) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 15000);
+            try {
+                return await fetch(url, { ...opts, signal: controller.signal });
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        async function loadStories() {
+            try {
+                const search = document.getElementById('search').value;
+                const status = document.getElementById('status-filter').value;
+                const category = document.getElementById('category-filter').value;
+                const book_status = document.getElementById('book-status-filter').value;
+                const curAdmin = localStorage.getItem('admin_name');
+                const res = await _fetchAPI(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&admin=${curAdmin || ''}&source=${currentSource}`);
+                
+                if (!res.ok) throw new Error(`Server Error: ${res.status} ${res.statusText}`);
+                
+                const data = await res.json();
+                totalPages = data.total_pages;
+                
+                document.getElementById('page-num').innerText = curPage;
+                document.getElementById('story-stats').innerText = `Tổng cộng ${data.total} truyện`;
+                
+                // Update Headers Stats
+                if(data.stats) {
+                    // Show: QUEUE: [MY] / [TOTAL]
+                    const myQ = data.stats.my_queue !== undefined ? data.stats.my_queue : '?';
+                    document.getElementById('stat-queue').innerHTML = `<span class="text-orange-400 border-b border-orange-500">${myQ}</span> <span class="text-slate-600">/</span> ${data.stats.queue}`;
+                    document.getElementById('stat-run').innerText = data.stats.running;
+                }
+                
+                const list = document.getElementById('story-list');
+
+                // Lưu lại các ID của truyện 'completed' đang được tick trước khi render lại
+                const prevCheckedCompleted = new Set(
+                    Array.from(document.querySelectorAll('.story-ck-completed:checked'))
+                        .map(c => parseInt(c.value))
+                );
+
+                // Filter theo nhãn kiểm tra (client-side vì checkCache lưu ở JS)
+                const checkFilter = document.getElementById('check-filter').value;
+                let stories = data.stories;
+                if (checkFilter) {
+                    stories = stories.filter(s => checkCache[s.id] && checkCache[s.id].status === checkFilter);
+                }
+
+                // ── SẮP XẾP: Truyện hoạt động gần đây lên trên, completed xuống cuối ──
+                // Thứ tự ưu tiên: crawling > repairing > selected > paused > error > pending > completed
+                const STATUS_PRIORITY = {
+                    'crawling':  0,
+                    'repairing': 1,
+                    'selected':  2,
+                    'paused':    3,
+                    'error':     4,
+                    'pending':   5,
+                    'completed': 6,
+                };
+                stories = stories.slice().sort((a, b) => {
+                    // Thấy nhãn ✓ SYNC → đưa xuống cuối, không xét gì thêm
+                    const isSyncA = (a.uploaded_chapters||0) > 0 && Math.max(0, (a.downloaded_chapters||0) - (a.uploaded_chapters||0)) === 0;
+                    const isSyncB = (b.uploaded_chapters||0) > 0 && Math.max(0, (b.downloaded_chapters||0) - (b.uploaded_chapters||0)) === 0;
+                    if (isSyncA !== isSyncB) return isSyncA ? 1 : -1;
+
+                    const pa = STATUS_PRIORITY[a.crawl_status] ?? 5;
+                    const pb = STATUS_PRIORITY[b.crawl_status] ?? 5;
+                    if (pa !== pb) return pa - pb;
+                    // Cùng nhóm → id mới hơn lên trên
+                    return b.id - a.id;
+                });
+
+                list.innerHTML = '';
+                // data is now accessible here
+                stories.forEach(s => {
+                    const total = s.chapters || 0;
+                    const current = s.downloaded_chapters || 0;
+                    const progress = total > 0 ? Math.round((current / total) * 100) : 0;
+                    
+                    const tr = document.createElement('tr');
+                    
+                    // Admin Logic
+                    const storyAdmin = s.admin_control;
+                    const isLocked = false; // Tất cả admin đều có thể chọn mọi truyện
+                    // DEBUG: Force log to console
+                    if (storyAdmin) console.log(`DEBUG: ID ${s.id} | Story Admin: [${storyAdmin}] | Current Admin: [${curAdmin}] | Locked: ${isLocked}`);
+    
+                    const adminColor = isLocked ? 'bg-red-900/40 text-red-400 border-red-500/30' : 'bg-emerald-900/40 text-emerald-400 border-emerald-500/30';
+                    
+                    // Checkbox logic: Auto-check chỉ khi đang trong scraper queue
+                    // completed KHÔNG auto-check nhưng vẫn cho phép tick tay để Upload
+                    const isChecked = ['selected', 'crawling', 'repairing'].includes(s.crawl_status);
+                    
+                    const uploaded = s.uploaded_chapters || 0;
+                    const downloaded = s.downloaded_chapters || 0;
+                    const uploadDelta = Math.max(0, downloaded - uploaded);
+                    const uploadPct = downloaded > 0 ? Math.round((uploaded / downloaded) * 100) : 0;
+                    let uploadHTML = '';
+                    if (uploaded === 0 && downloaded === 0) {
+                        uploadHTML = '<span class="text-slate-700 text-[10px]">—</span>';
+                    } else if (uploaded === 0) {
+                        uploadHTML = '<span class="text-[10px] text-slate-500 italic">Chưa upload</span>';
+                    } else {
+                        const upBarColor = uploadDelta === 0 ? 'from-teal-600 to-teal-400' : 'from-amber-600 to-amber-400';
+                        const upPctColor = uploadDelta === 0 ? 'text-teal-400' : 'text-amber-400';
+                        const upLabel = uploadDelta === 0
+                            ? '<span class="text-teal-400 font-black text-[9px] uppercase tracking-widest ml-1">✓ Sync</span>'
+                            : '<span class="text-amber-400 text-[9px] ml-1">+' + uploadDelta + ' mới</span>';
+                        uploadHTML = '<div class="flex justify-between text-[10px] font-bold text-slate-500 mb-1">'
+                            + '<span>' + uploaded + ' / ' + downloaded + upLabel + '</span>'
+                            + '<span class="flex items-center gap-2">'
+                            + '<span class="' + upPctColor + '">' + uploadPct + '%</span>'
+                            + '<button onclick="resetUpload(' + s.id + ')" title="Xóa truyện trên web và reset upload" '
+                            + 'class="text-[9px] px-1.5 py-0.5 rounded border border-red-800 text-red-500 hover:bg-red-900/40 hover:text-red-300 transition-all font-black uppercase tracking-wider">↺ RESET</button>'
+                            + '</span>'
+                            + '</div>'
+                            + '<div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">'
+                            + '<div class="h-full bg-gradient-to-r ' + upBarColor + ' transition-all" style="width:' + uploadPct + '%"></div>'
+                            + '</div>';
+                    }
+
+                    tr.className = `border-t border-white/5 transition-all group ${isLocked ? 'opacity-50 grayscale pointer-events-none bg-slate-900/50' : 'hover:bg-white/5'}`;
+    
+                    tr.innerHTML = `
+                        <!-- COL 1: ID / Checkbox -->
+                        <td class="p-4 text-center">
+                            ${isLocked 
+                                ? `<span class="text-[10px] font-black text-red-500 border border-red-900 bg-red-900/20 px-1 py-0.5 rounded">LOCKED</span>`
+                                : s.crawl_status === 'completed'
+                                    ? `<input type="checkbox" class="story-ck story-ck-completed w-4 h-4 rounded border-slate-600 bg-slate-800 text-teal-500 focus:ring-teal-500 cursor-pointer" 
+                                       value="${s.id}"
+                                       title="Tick để chọn upload — không ảnh hưởng trạng thái scraper">`
+                                    : `<input type="checkbox" class="story-ck w-4 h-4 rounded border-slate-600 bg-slate-800 text-orange-500 focus:ring-orange-500 cursor-pointer" 
+                                       value="${s.id}" 
+                                       ${isChecked ? 'checked' : ''} 
+                                       onchange="toggleSelect(${s.id}, this.checked)">`
+                            }
+                        </td>
+
+                        <!-- COL 2: Truyện (Title) -->
+                        <td class="p-4">
+                            <div class="font-bold text-slate-100 group-hover:text-orange-400 flex items-center gap-2 flex-wrap">
+                                ${s.book_status === 'Full' ? '<span class="text-[10px] bg-green-900 text-green-300 px-1 py-0.5 rounded shadow-green-900/50">FULL</span>' : ''}
+                                ${s.book_status !== 'Full' ? '<span class="text-[10px] bg-blue-900 text-blue-300 px-1 py-0.5 rounded shadow-blue-900/50">ONGOING</span>' : ''}
+                                <a href="${s.url}" target="_blank" class="decoration-none hover:underline truncate max-w-[250px] block" title="${s.title}">${s.title}</a>
+                                ${storyAdmin ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${adminColor}">👤 ${storyAdmin}</span>` : ''}
+                                ${checkCache[s.id] ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black border uppercase ${checkCache[s.id].status === 'warn' ? 'text-amber-400 border-amber-700 bg-amber-900/20' : 'text-red-400 border-red-700 bg-red-900/20'}" title="${checkCache[s.id].summary}">⚠ ${checkCache[s.id].label}</span>` : ''}
+                                ${s.meta_status === 'ready' ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-black border uppercase text-violet-300 border-violet-700 bg-violet-900/20" title="Đã có thông tin meta, sẵn sàng đổi tên">📝 META</span>' : ''}
+                                ${s.meta_status === 'no_chapter_names' ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-black border uppercase text-slate-400 border-slate-700 bg-slate-800/50" title="Không có tên chương — xử lý thủ công">— Không tên chương</span>' : ''}
+                            </div>
+                            <div class="text-[10px] text-slate-500 mt-1 uppercase tracking-wide flex gap-2">
+                                 <span>${s.author}</span>
+                                 <span class="text-slate-700">|</span>
+                                 <span>${s.category || 'N/A'}</span>
+                            </div>
+                        </td>
+
+                        <!-- COL 3: User (Bot/Admin) -->
+                        <td class="p-4 text-center w-24">
+                             ${s.last_account_idx != null && ['crawling','repairing','paused'].includes(s.crawl_status) 
+                                ? `<span class="px-2 py-1 bg-indigo-900/40 text-indigo-300 text-[10px] font-bold rounded border border-indigo-500/20 inline-flex items-center gap-1 shadow-[0_0_10px_rgba(99,102,241,0.2)]">Bot ${s.last_account_idx}</span>` 
+                                : '<span class="text-slate-700 text-[10px]">-</span>'}
+                        </td>
+
+                        <!-- COL 4: Tiến độ (Web) -->
+                        <td class="p-4">
+                            <div class="flex justify-between text-[10px] uppercase font-bold text-slate-500 mb-1">
+                                <span>${current} / ${total || '?'} ${s.mapped_count ? `<span class="text-indigo-400 font-black">/ ${s.mapped_count}</span>` : ''}</span>
+                                <span class="${progress===100?'text-green-500':'text-orange-500'}">${progress}%</span>
+                            </div>
+                            <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all shadow-[0_0_10px_rgba(249,115,22,0.5)]" style="width: ${progress}%"></div></div>
+                        </td>
+
+                        <!-- COL 5: Thực tế (File) -->
+                        <td class="p-4 font-mono text-xs text-indigo-400 font-bold text-center">
+                            ${s.actual_chapters || 0}
+                        </td>
+
+                        <!-- COL 6: Upload Web -->
+                        <td class="p-4 min-w-[140px]">
+                            ${uploadHTML}
+                        </td>
+
+                        <!-- COL machine: Máy lưu trữ -->
+                        <td class="p-4 text-center w-16">
+                            ${s.storage_label
+                                ? `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-black border" style="${machineLabelStyle(s.storage_label)}" title="Lưu tại đường dẫn ${s.storage_label}">${s.storage_label}</span>
+                                   <button onclick="openFolder(this)" data-slug="${s.slug}" data-title="${s.title.replace(/"/g,'&quot;')}" title="Mở thư mục truyện" class="block mx-auto mt-1 text-slate-500 hover:text-slate-200 transition-all text-base">📂</button>`
+                                : '<span class="text-slate-700 text-[10px]">—</span>'
+                            }
+                        </td>
+
+                        <!-- COL 6: Trạng thái -->
+                        <td class="p-4 text-center">
+                            <span class="status-badge status-${s.crawl_status}">${s.crawl_status}</span>
+                            ${s.last_updated ? `<div class="text-[9px] text-slate-600 mt-1 font-mono">${new Date(s.last_updated).toLocaleTimeString()}</div>` : ''}
+                            ${s.crawl_status === 'crawling' 
+                                ? `<div class="mt-1"><button onclick="stopStory(${s.id})" class="text-[9px] text-red-400 hover:text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/20 transition-all uppercase font-bold tracking-wider">STOP</button></div>`
+                                : ''}
+                        </td>
+                    `;
+                    list.appendChild(tr);
+                });
+
+                // Restore trạng thái tick của các truyện 'completed' sau khi render lại
+                if (prevCheckedCompleted.size > 0) {
+                    document.querySelectorAll('.story-ck-completed').forEach(ck => {
+                        if (prevCheckedCompleted.has(parseInt(ck.value))) {
+                            ck.checked = true;
+                        }
+                    });
+                }
+    
+            } catch(e) {
+                // Bỏ qua AbortError — do race condition fix huỷ request cũ, không phải lỗi thật
+                if (e && e.name === 'AbortError') return;
+                console.error(e);
+                document.getElementById('story-list').innerHTML = `<tr><td colspan="8" class="text-center p-8 text-red-500">Lỗi kết nối: ${e.message}</td></tr>`;
+                return;
+            }
+        }
+
+        async function loadAccounts() {
+            const list = document.getElementById('account-content');
+            list.innerHTML = '<div class="text-center text-slate-500 italic">Checking Account Pool...</div>'; // clear previous content
+            list.className = "flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-2"; // Remove previous classes if needed, or override
+
+            // Cập nhật label tiêu đề theo source
+            const srcFile = currentSource === 'WIKI' ? 'userpass-wiki.txt' : 'accounts.txt';
+            const srcLabel = document.getElementById('accounts-source-label');
+            const fileLabel = document.getElementById('accounts-file-label');
+            if (srcLabel) srcLabel.innerText = srcFile;
+            if (fileLabel) fileLabel.innerText = srcFile;
+
+            const res = await fetch(`/api?action=get_accounts&source=${currentSource}`);
+            const data = await res.json();
+            
+            list.innerHTML = '';
+            
+            // Render nicer list with Locks
+            const curAdmin = localStorage.getItem('admin_name');
+            let myAccounts = [];
+            
+            if(data.accounts && data.accounts.length > 0) {
+                 const container = document.createElement('div');
+                 container.className = "flex flex-col gap-2";
+                 
+                 data.accounts.forEach(acc => {
+                     const isLocked = !!acc.locked_by;
+                     const isMine = acc.locked_by === curAdmin;
+                     if(isMine) myAccounts.push(acc.index);
+                     
+                     const div = document.createElement('div');
+                     div.className = `p-3 rounded flex justify-between items-center border transition-all ${isMine ? 'bg-orange-900/20 border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.1)]' : isLocked ? 'bg-slate-900/50 border-slate-800 opacity-60 grayscale' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'}`;
+                     
+                     div.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <span class="w-8 h-8 rounded-full bg-slate-900 border border-white/10 flex items-center justify-center text-xs font-bold ${isMine ? 'text-orange-500 border-orange-500/30' : 'text-slate-400'} shadow-inner">${acc.index}</span>
+                            <span class="font-mono text-xs ${isMine ? 'text-orange-200 font-bold' : 'text-slate-400'}">${acc.email}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            ${isLocked 
+                                ? `<span class="px-2 py-1 rounded text-[9px] font-bold uppercase border tracking-wider ${isMine ? 'bg-orange-900/40 text-orange-400 border-orange-500/30' : 'bg-slate-800 text-slate-500 border-slate-700'}">Locked by ${acc.locked_by}</span>` 
+                                : '<span class="px-2 py-1 rounded text-[9px] font-bold uppercase border tracking-wider bg-emerald-900/20 text-emerald-500 border-emerald-500/20">Available</span>'}
+                        </div>
+                     `;
+                     container.appendChild(div);
+                 });
+                 list.appendChild(container);
+                 
+                 // Add Lock Controls (Sticky Footer or Top?)
+                 // Inserting before list might be better, but let's append for now.
+                 const controls = document.createElement('div');
+                 controls.className = "mt-4 pt-4 border-t border-white/10 sticky bottom-0 bg-black/80 backdrop-blur p-4 rounded-xl border border-white/5 shadow-2xl z-10";
+                 controls.innerHTML = `
+                    <div class="flex flex-col gap-2">
+                        <div class="text-[10px] text-slate-400 uppercase font-bold tracking-widest flex justify-between">
+                            <span>MY POOL CONTROL (ADMIN: <span class="text-orange-500">${curAdmin || 'Unknown'}</span>)</span>
+                            <span class="text-xs text-orange-400">${myAccounts.length} Active</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="text" id="pool-input" class="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:border-orange-500 focus:outline-none transition-colors" placeholder="Example: 1, 2, 3" value="${myAccounts.join(', ')}">
+                            <button onclick="lockAccountPool()" class="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white text-[10px] font-bold rounded shadow-lg shadow-orange-500/20 flex items-center gap-2 uppercase tracking-wide transition-all active:scale-95 whitespace-nowrap">
+                                🔒 LOCK POOL
+                            </button>
+                        </div>
+                        <p class="text-[9px] text-slate-600 italic">* Nhập danh sách index (ví dụ: 1, 2, 5) để khóa các account này cho riêng bạn. Bỏ trống để nhả tất cả.</p>
+                    </div>
+                 `;
+                 list.appendChild(controls); // Append INSIDE list, so it clears on reload
+                 
+            } else {
+                 list.innerText = "No accounts found.";
+            }
+        }
+
+        // Guard: chỉ 1 interval poll tại 1 thời điểm
+        let _discoveryInterval = null;
+
+        async function cancelAllPending() {
+            const status = document.getElementById('discovery-status');
+            // Stop interval đang chạy nếu có
+            if (_discoveryInterval) { clearInterval(_discoveryInterval); _discoveryInterval = null; }
+            resetDiscoveryUI();
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'cancel_all_pending'})});
+                const data = await res.json();
+                status.innerText = `🗑 Đã hủy ${data.cancelled || 0} lệnh trong hàng đợi.`;
+            } catch(e) {
+                status.innerText = '❌ Lỗi khi clear queue.';
+            }
+        }
+
+        async function submitDiscovery() {
+            const url = document.getElementById('discovery-url').value.trim();
+            const source = document.getElementById('discovery-source').value;
+            const btn = document.getElementById('btn-discovery');
+            const status = document.getElementById('discovery-status');
+            const spinner = document.getElementById('discovery-spinner');
+
+            if (_discoveryInterval) {
+                status.innerText = "⚠ Đang quét, vui lòng chờ hoặc nhấn Clear.";
+                return;
+            }
+
+            btn.disabled = true; spinner.classList.remove('hidden');
+            status.innerText = "Đang khởi động...";
+
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'submit_discovery', url, source})});
+                const data = await res.json();
+                if (data.success && data.command_id) {
+                    status.innerText = `[${source}] Scanner đang chạy...`;
+                    pollDiscovery(data.command_id);
+                } else {
+                    alert("Lỗi khởi động: " + (data.message || 'unknown'));
+                    resetDiscoveryUI();
+                }
+            } catch(e) { alert('Lỗi mạng: ' + e); resetDiscoveryUI(); }
+        }
+
+        async function pollDiscovery(commandId) {
+            const status = document.getElementById('discovery-status');
+            if (_discoveryInterval) { clearInterval(_discoveryInterval); _discoveryInterval = null; }
+
+            _discoveryInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api?action=get_command_result&command_id=${commandId}`);
+                    const data = await res.json();
+
+                    if (data.status === 'done') {
+                        clearInterval(_discoveryInterval); _discoveryInterval = null;
+                        resetDiscoveryUI();
+                        const results = data.result || {new: 0, conflicts: []};
+                        status.innerText = `✅ Hoàn tất. Thêm mới: ${results.new}. Trùng: ${(results.conflicts||[]).length}`;
+                        if (results.new > 0) { alert(`✅ Đã thêm mới ${results.new} truyện!`); loadStories(); }
+                        if (results.conflicts && results.conflicts.length > 0) showConflicts(results.conflicts);
+
+                    } else if (data.status === 'error' || data.status === 'cancelled') {
+                        clearInterval(_discoveryInterval); _discoveryInterval = null;
+                        resetDiscoveryUI();
+                        status.innerText = `❌ ${(data.result && data.result.message) || data.status}`;
+
+                    } else {
+                        status.innerText = `Đang quét... (${new Date().toLocaleTimeString()})`;
+                    }
+                } catch(e) {
+                    clearInterval(_discoveryInterval); _discoveryInterval = null;
+                    resetDiscoveryUI();
+                }
+            }, 3000);
+        }
+        
+        function resetDiscoveryUI() {
+            document.getElementById('btn-discovery').disabled = false;
+            document.getElementById('discovery-spinner').classList.add('hidden');
+        }
+        
+        // Conflict Handling
+        let globalConflicts = [];
+        function showConflicts(conflicts) {
+            globalConflicts = conflicts;
+            const tbody = document.getElementById('conflict-list');
+            tbody.innerHTML = '';
+            document.getElementById('modal-conflicts').classList.remove('hidden');
+            
+            conflicts.forEach((c, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-white/5 hover:bg-white/5";
+                tr.innerHTML = `
+                    <td class="p-2"><input type="checkbox" class="conflict-ck" value="${idx}" checked></td>
+                    <td class="p-2 font-bold text-slate-200">
+                        ${c.slug}
+                        <div class="text-[10px] text-slate-500">${c.title}</div>
+                    </td>
+                    <td class="p-2 text-slate-400">
+                        ${c.old_source} (${c.old_chapters} chap)
+                    </td>
+                    <td class="p-2 text-green-400 font-bold">
+                        ${c.new_source} (${c.new_chapters} chap)
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('conflict-count-msg').innerText = `Tổng: ${conflicts.length} truyện trùng.`;
+        }
+        
+        function toggleAllConflicts(checked) {
+            document.querySelectorAll('.conflict-ck').forEach(c => c.checked = checked);
+        }
+        
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            if (id === 'modal-check-upload') pauseAutoRefresh = false;
+        }
+        
+        async function confirmOverwrite() {
+            const checkboxes = document.querySelectorAll('.conflict-ck:checked');
+            if(checkboxes.length === 0) return closeModal('modal-conflicts'); // Dismiss
+            
+            const selectedIndices = Array.from(checkboxes).map(c => parseInt(c.value));
+            const updates = selectedIndices.map(i => globalConflicts[i]);
+            
+            const btn = document.getElementById('btn-overwrite');
+            btn.innerText = "Updating..."; btn.disabled = true;
+            
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'resolve_conflicts', updates: updates})});
+                const data = await res.json();
+                alert(`Đã cập nhật ${data.updated} truyện!`);
+                closeModal('modal-conflicts');
+                loadStories();
+            } finally {
+                btn.innerText = "Cập nhật (Overwrite)"; btn.disabled = false;
+            }
+        }
+
+        async function startScraper() {
+            const admin = localStorage.getItem('admin_name');
+            if(!admin) { document.getElementById('modal-login').classList.remove('hidden'); return; }
+            
+            // Get my locked accounts (đúng source đang chọn)
+            const res = await fetch(`/api?action=get_accounts&source=${currentSource}`);
+            const data = await res.json();
+            // Assuming data.accounts array exists
+            const myAccounts = (data.accounts || []).filter(a => a.locked_by === admin).map(a => a.index);
+            
+            if(myAccounts.length === 0) return alert("Bạn chưa khóa Account nào! Vào tab Accounts để chọn Pool.");
+            
+            if(!confirm(`Khởi động cào với ${myAccounts.length} accounts đang khóa của bạn?\n(Accounts: ${myAccounts.join(', ')})`)) return;
+            
+            const threads = document.getElementById('threads').value; 
+            
+            try {
+                const res2 = await fetch('/api', {method: 'POST', body: JSON.stringify({
+                    action: 'start_scraper', 
+                    admin: admin,
+                    accounts: myAccounts,
+                    threads: threads,
+                    source: currentSource
+                })});
+                const data2 = await res2.json();
+                if (data2.success) alert(data2.message);
+                else alert('Error: ' + data2.message);
+            } catch(e) { alert("Lỗi: " + e); }
+        }
+
+        async function killScrapers() {
+            const killChrome = confirm(
+                'D\u1eebng t\u1ea5t c\u1ea3 c\u00e1c lu\u1ed3ng c\u00e0o \u0111ang ch\u1ea1y?\n\n' +
+                '\u2022 OK = D\u1eebng scraper + Chrome\n' +
+                '\u2022 H\u1ee7y b\u1ecf = Kh\u00f4ng l\u00e0m g\u00ec'
+            );
+            if (!killChrome) return;
+
+            const btn = document.getElementById('btn-stop');
+            const icon = document.getElementById('btn-stop-icon');
+            const lbl  = document.getElementById('btn-stop-label');
+            if (btn) { btn.disabled = true; icon.innerText = '\u23F3'; lbl.innerText = 'Stopping...'; }
+
+            let cmdId = null;
+            try {
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ action: 'kill_scrapers', kill_chrome: true })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('\u274C L\u1ed7i g\u1eedi l\u1ec7nh: ' + (data.message || '?'), 'red');
+                    return;
+                }
+                cmdId = data.command_id;
+            } catch(e) {
+                showToast('\u274C L\u1ed7i k\u1ebft n\u1ed1i: ' + e.message, 'red');
+                return;
+            } finally {
+                if (!cmdId && btn) { btn.disabled = false; icon.innerText = '\u23F9'; lbl.innerText = 'STOP'; }
+            }
+
+            if (!cmdId) { showToast('\u274C Kh\u00f4ng nh\u1eadn \u0111\u01b0\u1ee3c command_id!', 'red'); return; }
+            showToast('\u23F3 \u0110\u00e3 g\u1eedi l\u1ec7nh STOP \u2014 ch\u1edd local agent x\u1eed l\u00fd...', 'green');
+
+            // Poll k\u1ebft qu\u1ea3 t\u1ed1i \u0111a 30s
+            let attempts = 0;
+            const timer = setInterval(async () => {
+                attempts++;
+                try {
+                    const r2 = await fetch(`/api?action=get_command_result&command_id=${cmdId}`);
+                    const d2 = await r2.json();
+                    if (d2.status === 'done' || d2.status === 'error') {
+                        clearInterval(timer);
+                        if (btn) { btn.disabled = false; icon.innerText = '\u23F9'; lbl.innerText = 'STOP'; }
+                        const result = d2.result || {};
+                        if (d2.status === 'done') {
+                            showToast(`\u2705 \u0110\u00e3 kill ${result.killed ?? 0} process!`, 'green');
+                        } else {
+                            showToast('\u274C Agent b\u00e1o l\u1ed7i khi kill', 'red');
+                        }
+                        loadStories();
+                    } else if (attempts >= 10) {
+                        clearInterval(timer);
+                        if (btn) { btn.disabled = false; icon.innerText = '\u23F9'; lbl.innerText = 'STOP'; }
+                        showToast('\u23F3 L\u1ec7nh \u0111\u00e3 g\u1eedi, agent \u0111ang x\u1eed l\u00fd (kh\u00f4ng nh\u1eadn \u0111\u01b0\u1ee3c ph\u1ea3n h\u1ed3i sau 30s)', 'green');
+                    }
+                } catch(e) {
+                    // poll th\u1ea5t b\u1ea1i, ti\u1ebfp t\u1ee5c th\u1eed
+                }
+            }, 3000);
+        }
+
+
+        async function syncProgress() {
+            const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'sync_progress'})});
+            const data = await res.json();
+            if (data.success) { alert('Đã cập nhật xong tiến độ từ ổ đĩa!'); loadStories(); }
+        }
+
+        function showToast(msg, color='green') {
+            const t = document.createElement('div');
+            t.className = 'fixed bottom-6 right-6 z-[999] text-white text-xs font-bold px-5 py-3 rounded-xl shadow-2xl transition-all ' + (color === 'green' ? 'bg-emerald-700' : 'bg-red-700');
+            t.innerText = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        async function resetUpload(storyId) {
+            // Đọc từ modal Check & Upload nếu có, nếu không prompt
+            let webUrl = (document.getElementById('cu-web-url') ? document.getElementById('cu-web-url').value.trim() : '').replace(/\/$/, '');
+            let secret = document.getElementById('cu-secret') ? document.getElementById('cu-secret').value.trim() : '';
+
+            if (!webUrl) {
+                webUrl = (prompt('Nhập WEB APP URL:', 'http://localhost:3000') || '').trim().replace(/\/$/, '');
+                if (!webUrl) return;
+                if (document.getElementById('cu-web-url')) document.getElementById('cu-web-url').value = webUrl;
+            }
+            if (!secret) {
+                secret = (prompt('Nhập SECRET KEY:') || '').trim();
+                if (!secret) return;
+                if (document.getElementById('cu-secret')) document.getElementById('cu-secret').value = secret;
+            }
+
+            if (!confirm('Xác nhận xóa truyện này trên Web DB và reset trạng thái upload?')) return;
+
+            try {
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'reset_upload', story_id: storyId, web_url: webUrl, secret: secret })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✅ ' + data.message, 'green');
+                    loadStories();
+                } else {
+                    showToast('❌ ' + data.message, 'red');
+                }
+            } catch(e) {
+                showToast('❌ Lỗi: ' + e.message, 'red');
+            }
+        }
+
+        async function toggleSelect(id, checked) {
+            const admin = localStorage.getItem('admin_name');
+            if(!admin) {
+                alert("Bạn chưa đăng nhập!");
+                // Revert
+                const ck = document.querySelector(`.story-ck[value="${id}"]`);
+                if(ck) ck.checked = !checked;
+                return;
+            }
+            // Optimistic Update (Prevent Lag)
+            // But we reload anyway.
+            
+            await fetch('/api', {method: 'POST', body: JSON.stringify({
+                action: 'toggle_select', 
+                id: id, 
+                selected: checked,
+                admin: admin
+            })});
+            // loadStories(); // Let user refresh manually? Or auto? 
+            // Better to refresh to confirm lock state.
+            loadStories();
+        }
+
+        async function toggleAllPage(checked) {
+            const admin = localStorage.getItem('admin_name');
+            if(!admin) {
+                alert("Bạn chưa đăng nhập!");
+                document.getElementById('check-all').checked = !checked;
+                return;
+            }
+            
+            const allCheckboxes = document.querySelectorAll('.story-ck');
+            const ids = Array.from(document.querySelectorAll('.story-ck:not(.story-ck-completed)')).map(c => parseInt(c.value));
+
+            // Visual feedback cho tất cả (kể cả completed)
+            allCheckboxes.forEach(c => c.checked = checked);
+
+            if(ids.length === 0) { loadStories(); return; }
+            
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({
+                    action: 'batch_toggle_select',
+                    ids: ids,
+                    selected: checked,
+                    admin: admin
+                })});
+                const data = await res.json();
+                console.log(data.message);
+                loadStories(); // Refresh to show locks
+            } catch(e) {
+                alert("Lỗi: " + e);
+                loadStories(); // Revert on error
+            }
+        }
+
+        async function syncSelected() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if(checked.length === 0) return alert('Chưa chọn truyện nào!');
+
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            // Gửi kèm title để agent tìm đúng thư mục
+            const titles = {};
+            checked.forEach(c => {
+                const row = c.closest('tr');
+                const a = row ? row.querySelector('td:nth-child(2) a') : null;
+                if (a) titles[parseInt(c.value)] = a.innerText.trim();
+            });
+
+            const btn = document.getElementById('btn-sync');
+            const originalText = btn.innerText;
+            btn.innerText = "⏳..."; btn.disabled = true;
+
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'sync_selected', ids, titles})});
+                const data = await res.json();
+                if (data.queued) showToast('✅ Đã gửi lệnh sync cho agent.', 'green');
+                else alert(data.message || JSON.stringify(data));
+            } catch(e) {
+                alert("Lỗi sync: " + e);
+            }
+
+            btn.innerText = originalText; btn.disabled = false;
+            setTimeout(loadStories, 4000);
+        }
+
+        let _importLocalStoryId = null;
+
+        function openImportLocalModal() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chọn đúng 1 truyện!');
+            if (checked.length > 1) return alert('Chỉ chọn 1 truyện mỗi lần!');
+            const c = checked[0];
+            _importLocalStoryId = parseInt(c.value);
+            const row = c.closest('tr');
+            const title = row ? (row.querySelector('td:nth-child(2) a')?.innerText || '') : '';
+            document.getElementById('import-local-title').innerText = title;
+            document.getElementById('import-local-folder').value = '';
+            document.getElementById('modal-import-local').classList.remove('hidden');
+        }
+
+        async function doImportLocalData() {
+            const folderName = document.getElementById('import-local-folder').value.trim();
+            if (!folderName) return alert('Nhập tên thư mục!');
+            if (!_importLocalStoryId) return;
+            document.getElementById('modal-import-local').classList.add('hidden');
+            try {
+                const machine = document.getElementById('import-local-machine').value;
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
+                    action: 'import_local_data',
+                    story_id: _importLocalStoryId,
+                    folder_name: folderName,
+                    storage_label: machine
+                })});
+                const data = await res.json();
+                if (!data.queued) {
+                    showToast('❌ ' + (data.error || JSON.stringify(data)), 'red');
+                    return;
+                }
+                const cmdId = data.command_id;
+                showToast(`⏳ Đã gửi lệnh (id=${cmdId}), đang chờ agent xử lý...`, 'blue');
+
+                // Poll kết quả tối đa 30s
+                let elapsed = 0;
+                const poll = setInterval(async () => {
+                    elapsed += 2;
+                    try {
+                        const r = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'check_command', command_id: cmdId }) });
+                        const d = await r.json();
+                        if (d.status === 'done') {
+                            clearInterval(poll);
+                            const result = d.result || {};
+                            if (result.success) {
+                                showToast(`✅ Ghi nhận xong: ${result.downloaded_chapters} chương (${result.total_files} file) trong "${result.folder}"`, 'green');
+                            } else {
+                                showToast(`❌ Agent báo lỗi: ${result.message || JSON.stringify(result)}`, 'red');
+                            }
+                            loadStories();
+                        } else if (d.status === 'error' || elapsed >= 30) {
+                            clearInterval(poll);
+                            showToast(elapsed >= 30 ? '⚠️ Agent không phản hồi sau 30s' : `❌ Lỗi: ${d.status}`, 'red');
+                            loadStories();
+                        }
+                    } catch(e) { clearInterval(poll); }
+                }, 2000);
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
+        }
+
+        async function deleteStories() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            if (!confirm(`⚠️ Xóa VĨNH VIỄN ${ids.length} truyện khỏi DB?\nHành động này không thể hoàn tác!`)) return;
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'delete_stories', ids }) });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ Đã xóa ${data.deleted} truyện khỏi DB.`, 'green');
+                    loadStories();
+                } else {
+                    showToast('❌ ' + data.message, 'red');
+                }
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
+        }
+
+        async function deleteMenuMap() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+
+            // Lấy slug từ các row đã tick
+            const slugs = Array.from(checked).map(c => {
+                const row = c.closest('tr');
+                const a = row ? row.querySelector('td:nth-child(2) a') : null;
+                return a ? a.getAttribute('href') : null;
+            }).filter(Boolean);
+
+            if (!confirm(`Xóa menu_map_v1.json của ${ids.length} truyện?\nSau đó chạy script delete_menu_map.py trên máy để thực hiện.`)) return;
+
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
+                    action: 'delete_menu_map',
+                    ids: ids,
+                    story_ids: ids
+                })});
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ Đã ghi lệnh xóa ${ids.length} truyện vào hàng đợi. Chạy delete_menu_map.py để thực hiện!`, 'green');
+                } else {
+                    showToast('❌ ' + data.message, 'red');
+                }
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
+        }
+
+        async function resetCrawlingAll() {
+            if (!confirm(`RESET tất cả các truyện đang kẹt ở trạng thái CRAWLING / REPAIRING về SELECTED?\nChỉ dùng khi các Bot trước đó lỡ tắt đột ngột và bị kẹt mốc thời gian lấy truyện!`)) return;
+
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'reset_crawling_all' }) });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ Đã giải phóng hoàn tất ${data.affected} truyện đang mắc kẹt!`, 'green');
+                    loadStories();
+                } else {
+                    showToast('❌ ' + data.message, 'red');
+                }
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
+        }
+
+        async function resetBot() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            if (!confirm(`Reset bot cho ${ids.length} truyện đã chọn?`)) return;
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'reset_bot', ids }) });
+                const data = await res.json();
+                showToast(`✅ Đã reset bot cho ${data.updated ?? ids.length} truyện`, 'green');
+                loadStories();
+            } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
+        }
+
+        function openChangeStatusModal() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            document.getElementById('cs-subtitle').innerText = `Áp dụng cho ${checked.length} truyện đã chọn`;
+            document.getElementById('modal-change-status').classList.remove('hidden');
+        }
+
+        async function applyChangeStatus(newStatus) {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            if (ids.length === 0) return;
+
+            closeModal('modal-change-status');
+
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
+                    action: 'batch_change_status',
+                    ids: ids,
+                    status: newStatus
+                })});
+                const data = await res.json();
+                showToast(`✅ Đã đổi ${data.updated ?? ids.length} truyện → ${newStatus}`, 'green');
+                loadStories();
+            } catch(e) {
+                showToast('❌ Lỗi: ' + e.message, 'red');
+            }
+        }
+
+        function openChangeMachineModal() {
+            const checked = document.querySelectorAll('.story-ck:checked, .story-ck-completed:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            document.getElementById('cm-subtitle').innerText = `Áp dụng cho ${checked.length} truyện đã chọn`;
+            document.getElementById('modal-change-machine').classList.remove('hidden');
+        }
+
+        async function applyChangeMachine(label) {
+            const checked = document.querySelectorAll('.story-ck:checked, .story-ck-completed:checked');
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            if (ids.length === 0) return;
+            closeModal('modal-change-machine');
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
+                    action: 'change_storage_label',
+                    ids: ids,
+                    label: label
+                }), headers: {'Content-Type': 'application/json'} });
+                const data = await res.json();
+                const labelText = label ? `Máy ${label}` : 'NULL (bỏ gán)';
+                showToast(`✅ Đã chuyển ${data.updated ?? ids.length} truyện → ${labelText}`, 'green');
+                loadStories();
+            } catch(e) {
+                showToast('❌ Lỗi: ' + e.message, 'red');
+            }
+        }
+
+        async function crawlMissing() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if(checked.length === 0) return alert('Chưa chọn truyện nào!');
+            
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            const btn = document.getElementById('btn-missing');
+            const originalText = btn.innerText;
+            btn.innerText = "⏳..."; btn.disabled = true;
+            
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'crawl_missing', ids: ids})});
+                const data = await res.json();
+                alert(data.message);
+            } catch(e) {
+                alert("Lỗi: " + e);
+            }
+            btn.innerText = originalText; btn.disabled = false;
+            loadStories();
+        }
+
+        function changePage(delta) {
+            if (curPage + delta < 1 || curPage + delta > totalPages) return;
+            curPage += delta; loadStories();
+        }
+
+        let pauseAutoRefresh = false;
+
+        // ── CHỐNG LOAD TRÙNG ─────────────────────────────────────────────────
+        // Nếu đang load rồi thì bỏ qua, không abort — tránh bảng trắng
+        let _loadBusy = false;
+        const _loadStoriesOrig = loadStories;
+        loadStories = async function() {
+            if (_loadBusy) return;
+            _loadBusy = true;
+            try { await _loadStoriesOrig(); }
+            catch(e) { if (e && e.name !== 'AbortError') console.warn('[loadStories]', e); }
+            finally { _loadBusy = false; }
+        };
+
+        setInterval(() => { if (currentTab === 'stories' && !pauseAutoRefresh) loadStories(); }, 5000);
+
+        // --- LOGIN & POOL LOGIC ---
+        function checkLogin() {
+            const admin = localStorage.getItem('admin_name');
+            const ml = localStorage.getItem('machine_label') || '';
+            const headerName = document.getElementById('header-admin-name');
+
+            if (admin) {
+                 document.getElementById('modal-login').classList.add('hidden');
+                 if(headerName) headerName.innerText = admin + (ml ? ` [Máy ${ml}]` : '');
+                 // Pre-select machine label in modal nếu mở lại
+                 const mlInput = document.getElementById('machine-label-input');
+                 if(mlInput && ml) mlInput.value = ml;
+            } else {
+                document.getElementById('modal-login').classList.remove('hidden');
+                if(headerName) headerName.innerText = "LOGIN (CLICK ME)";
+            }
+        }
+
+        function doLogin() {
+            const val = document.getElementById('admin-name-input').value.trim();
+            if(!val) return alert("Vui lòng nhập tên!");
+            const ml = document.getElementById('machine-label-input').value;
+            localStorage.setItem('admin_name', val);
+            if(ml) localStorage.setItem('machine_label', ml);
+            document.getElementById('modal-login').classList.add('hidden');
+            location.reload();
+        }
+        
+        // Ensure input exists before adding listener (it should)
+        const loginInput = document.getElementById('admin-name-input');
+        if(loginInput) {
+            loginInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') doLogin();
+            });
+        }
+
+        async function lockAccountPool() {
+            const admin = localStorage.getItem('admin_name');
+            if(!admin) return alert("Bạn chưa đăng nhập!");
+            
+            const raw = document.getElementById('pool-input').value;
+            const parts = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
+            
+            const msg = parts.length === 0 
+                ? "Bạn có chắc muốn TRẢ HẾT account đang giữ?" 
+                : `Bạn muốn giành quyền quản lý ${parts.length} tài khoản này?\n(${parts.join(', ')})`;
+                
+            if(!confirm(msg)) return;
+            
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({
+                    action: 'lock_account_pool',
+                    admin: admin,
+                    indexes: parts,
+                    source: currentSource
+                })});
+                const data = await res.json();
+                if(data.success) {
+                    alert(data.message);
+                    loadAccounts(); 
+                } else {
+                    alert("Lỗi: " + data.message);
+                }
+            } catch(e) { alert("Lỗi kết nối: " + e); }
+        }
+
+        // ============================================================
+        // CHECK & UPLOAD FEATURE
+        // ============================================================
+        let checkResults = [];  // Store last check result for upload
+        let checkCache = {};    // Cache check results by story id
+
+        async function loadCheckCache() {
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'load_check_cache' }) });
+                const data = await res.json();
+                if (data.success) checkCache = data.cache || {};
+            } catch(e) { console.warn('[CheckCache]', e); }
+        }
+
+        async function saveCheckCache() {
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'save_check_cache', cache: checkCache }) });
+                const data = await res.json();
+                showToast(data.success ? '💾 Đã lưu!' : '❌ Lưu thất bại', data.success ? 'green' : 'red');
+            } catch(e) { showToast('❌ ' + e.message, 'red'); }
+        }
+
+        function removeCuRow(id) {
+            const row = document.getElementById(`cu-row-${id}`);
+            if (row) row.remove();
+            checkResults = checkResults.filter(r => r.id !== id);
+            const remaining = document.querySelectorAll('[id^="cu-row-"]').length;
+            document.getElementById('cu-subtitle').innerText = `${remaining} truyện được chọn`;
+            if (remaining === 0) closeModal('modal-check-upload');
+        }
+
+        async function saveOneCheckResult(storyId) {
+            if (!checkCache[storyId]) return;
+            try {
+                await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'save_one_check_cache', story_id: storyId, entry: checkCache[storyId] }) });
+                showToast('💾 Đã lưu!', 'green');
+            } catch(e) { showToast('❌ ' + e.message, 'red'); }
+        }
+
+        function openCheckUploadModal() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+
+            // Reset UI
+            checkResults = [];
+            document.getElementById('cu-summary').classList.add('hidden');
+            document.getElementById('cu-upload-progress').classList.add('hidden');
+            document.getElementById('btn-do-upload-warn').classList.add('hidden');
+            document.getElementById('btn-do-upload-ok').classList.add('hidden');
+            document.getElementById('cu-status-msg').innerText = '';
+            document.getElementById('cu-progress-log').innerHTML = '';
+
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            const titles = Array.from(checked).map(c => {
+                const row = c.closest('tr');
+                const titleEl = row ? row.querySelector('td:nth-child(2) a') : null;
+                return titleEl ? titleEl.innerText.trim() : `ID ${c.value}`;
+            });
+
+            // Show selected stories pending check
+            const listEl = document.getElementById('cu-story-list');
+            listEl.innerHTML = '';
+            ids.forEach((id, i) => {
+                const div = document.createElement('div');
+                div.id = `cu-row-${id}`;
+                div.className = 'flex items-center gap-3 bg-slate-800/50 rounded-lg px-4 py-2.5 border border-white/5';
+                div.innerHTML = `
+                    <span class="text-slate-500 text-[10px] font-mono w-8 text-right">#${id}</span>
+                    <span class="flex-1 text-sm font-bold text-slate-300 truncate">${titles[i]}</span>
+                    <span id="cu-status-${id}" class="text-[10px] font-bold text-slate-500 italic">Chờ kiểm tra...</span>
+                    <button onclick="removeCuRow(${id})" title="Bỏ chọn" class="text-slate-600 hover:text-red-400 text-xs px-1.5 py-0.5 rounded border border-slate-700 hover:border-red-500 font-bold">✕</button>
+                `;
+                listEl.appendChild(div);
+            });
+
+            document.getElementById('cu-subtitle').innerText = `${ids.length} truyện được chọn`;
+            pauseAutoRefresh = true;
+            document.getElementById('modal-check-upload').classList.remove('hidden');
+        }
+
+        async function doCheckContent() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) { closeModal('modal-check-upload'); return; }
+
+            const ids = Array.from(checked).map(c => parseInt(c.value));
+            const minChars = parseInt(document.getElementById('cu-min-chars').value) || 500;
+
+            // Reset state
+            checkResults = [];
+            document.getElementById('cu-summary').classList.add('hidden');
+            document.getElementById('btn-do-upload-warn').classList.add('hidden');
+            document.getElementById('btn-do-upload-ok').classList.add('hidden');
+            document.getElementById('btn-save-check').classList.add('hidden');
+            document.getElementById('cu-status-msg').innerText = 'Đang kiểm tra...';
+            Array.from(document.querySelectorAll('.story-ck:checked')).forEach(c => { delete checkCache[parseInt(c.value)]; });
+
+            const spinner = document.getElementById('cu-check-spinner');
+            const btn = document.getElementById('btn-do-check');
+            spinner.classList.remove('hidden');
+            btn.disabled = true;
+
+            // Reset all row statuses
+            ids.forEach(id => {
+                const el = document.getElementById(`cu-status-${id}`);
+                if (el) el.innerHTML = `<span class="text-slate-500 italic">Đang quét...</span>`;
+                const row = document.getElementById(`cu-row-${id}`);
+                if (row) row.className = 'flex items-center gap-3 bg-slate-800/50 rounded-lg px-4 py-2.5 border border-white/5';
+            });
+
+            try {
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'check_upload_content', ids: ids, min_chars: minChars })
+                });
+                const data = await res.json();
+
+                if (!data.success) throw new Error(data.message);
+
+                checkResults = data.results;
+                let countOk = 0, countWarn = 0, countErr = 0;
+
+                data.results.forEach(r => {
+                    const statusEl = document.getElementById(`cu-status-${r.id}`);
+                    const rowEl = document.getElementById(`cu-row-${r.id}`);
+                    
+                    const hasGap = r.missing_indexes && r.missing_indexes.length > 0;
+                    const hasContentErr = r.error_chapters && r.error_chapters.length > 0;
+                    const isEmpty = r.total_files === 0;
+
+                    let statusHTML = '';
+                    let rowClass = 'flex items-center gap-3 rounded-lg px-4 py-2.5 border ';
+
+                    if (isEmpty) {
+                        // Critical: no files at all
+                        countErr++;
+                        statusHTML = `<span class="text-red-400 font-bold">❌ Không có file nào!</span>`;
+                        rowClass += 'bg-red-900/20 border-red-500/30';
+                    } else if (hasGap || hasContentErr) {
+                        countWarn++;
+                        let parts = [];
+                        if (hasGap) {
+                            const gapStr = r.missing_indexes.slice(0, 10).join(', ') + (r.missing_indexes.length > 10 ? ` ... (+${r.missing_indexes.length - 10})` : '');
+                            parts.push(`<div class="mt-1.5 text-amber-300 text-[10px]">⚠ Thiếu index: <span class="font-mono font-bold">${gapStr}</span></div>`);
+                        }
+                        if (hasContentErr) {
+                            r.error_chapters.forEach(ec => {
+                                const label = ec.chars === 0 ? '❌ Trống' : `⚠ ${ec.chars} ký tự`;
+                                const color = ec.chars === 0 ? 'text-red-400' : 'text-amber-400';
+                                parts.push(`<div class="mt-0.5 ${color} text-[10px] font-mono">→ [${ec.index.toString().padStart(4,'0')}] ${ec.title.substring(0,40)} — <span class="font-bold">${label}</span></div>`);
+                            });
+                        }
+
+                        // Expand row to show detail
+                        const rowFull = document.getElementById(`cu-row-${r.id}`);
+                        if (rowFull) {
+                            rowFull.className = 'rounded-lg px-4 py-3 border bg-amber-900/10 border-amber-500/25';
+                            const titleEl = rowFull.querySelector('.flex-1');
+                            const okBadge = `<span class="text-[10px] text-slate-400 ml-2">${r.total_files} file | delta: ${r.delta} chương cần upload</span>`;
+                            rowFull.innerHTML = `
+                                <div class="flex items-center gap-3">
+                                    <span class="text-slate-500 text-[10px] font-mono w-8 text-right">#${r.id}</span>
+                                    <span class="flex-1 text-sm font-bold text-amber-300 truncate">${r.title}${okBadge}</span>
+                                    <span class="text-amber-400 text-[10px] font-bold uppercase">⚠ Cần kiểm tra</span>
+                                    <button onclick="openStoryFolder(${r.id})" title="Mở thư mục" class="text-slate-500 hover:text-teal-400 text-sm px-1">📁</button>
+                                    <button onclick="saveOneCheckResult(${r.id}); this.disabled=true; this.innerText='✓ Đã lưu';" title="Lưu kết quả check" class="text-[9px] px-2 py-0.5 rounded border border-teal-700 text-teal-400 hover:bg-teal-900/30 font-bold">💾 Lưu</button>
+                                    <button onclick="removeCuRow(${r.id})" title="Bỏ khỏi danh sách" class="text-[9px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-500 hover:text-red-400 hover:border-red-500 font-bold">✕</button>
+                                </div>
+                                <div class="ml-11 mt-1 space-y-0.5">${parts.join('')}</div>
+                            `;
+                        }
+                        return;
+                    } else {
+                        countOk++;
+                        statusHTML = `<span class="text-green-400 font-bold">✅ OK — delta: ${r.delta} chương</span>
+                                      <button onclick="saveOneCheckResult(${r.id}); this.disabled=true; this.innerText='✓ Đã lưu';" title="Lưu kết quả check" class="ml-2 text-[9px] px-2 py-0.5 rounded border border-teal-700 text-teal-400 hover:bg-teal-900/30 font-bold">💾 Lưu</button>`;
+                        rowClass += 'bg-green-900/10 border-green-500/20';
+                    }
+
+                    if (statusEl) statusEl.innerHTML = statusHTML;
+                    if (rowEl) rowEl.className = rowClass;
+                });
+
+                // Summary
+                document.getElementById('cu-stat-total').innerText = data.results.length;
+                document.getElementById('cu-stat-ok').innerText = countOk;
+                document.getElementById('cu-stat-warn').innerText = countWarn;
+                document.getElementById('cu-stat-err').innerText = countErr;
+                document.getElementById('cu-summary').classList.remove('hidden');
+
+                // Build checkCache từ kết quả
+                data.results.forEach(r => {
+                    const hg = r.missing_indexes && r.missing_indexes.length > 0;
+                    const he = r.error_chapters && r.error_chapters.length > 0;
+                    const ie = r.total_files === 0;
+                    if (hg || he || ie) {
+                        let summary = [];
+                        if (hg) summary.push('Thiếu index: ' + r.missing_indexes.slice(0,5).join(',') + (r.missing_indexes.length>5?'...':''));
+                        if (he) summary.push(r.error_chapters.length + ' chương lỗi');
+                        if (ie) summary.push('Không có file');
+                        checkCache[r.id] = { status: ie ? 'error' : 'warn', label: ie ? 'LỖI' : 'CẦN KIỂM TRA', summary: summary.join(' | '), checked_at: new Date().toISOString() };
+                    }
+                });
+                document.getElementById('btn-save-check').classList.remove('hidden');
+
+                // Decide which upload button to show
+                const okCount   = checkResults.filter(r => r.delta > 0 && r.total_files > 0 && r.missing_indexes.length === 0 && r.error_chapters.length === 0).length;
+                const warnCount = checkResults.filter(r => r.delta > 0 && r.total_files > 0 && ((r.missing_indexes && r.missing_indexes.length > 0) || (r.error_chapters && r.error_chapters.length > 0))).length;
+
+                if (countErr === 0 && countWarn === 0) {
+                    // Tất cả OK → chỉ hiện Upload
+                    document.getElementById('btn-do-upload-ok').classList.remove('hidden');
+                    document.getElementById('btn-do-upload-warn').classList.add('hidden');
+                    document.getElementById('cu-status-msg').innerText = `✅ Tất cả OK. Sẵn sàng upload ${checkResults.filter(r=>r.delta>0).reduce((a,r)=>a+r.delta,0)} chương mới.`;
+                } else {
+                    // Có cảnh báo:
+                    // - Nút "Upload" → chỉ upload truyện OK (nếu có)
+                    // - Nút "Vẫn Upload" → upload truyện bị cảnh báo
+                    if (okCount > 0) {
+                        document.getElementById('btn-do-upload-ok').classList.remove('hidden');
+                    } else {
+                        document.getElementById('btn-do-upload-ok').classList.add('hidden');
+                    }
+                    if (warnCount > 0) {
+                        document.getElementById('btn-do-upload-warn').classList.remove('hidden');
+                    } else {
+                        document.getElementById('btn-do-upload-warn').classList.add('hidden');
+                    }
+                    if (countErr > 0) {
+                        document.getElementById('cu-status-msg').innerText = `❌ ${countErr} truyện không có file. ⚠ ${warnCount} truyện cần kiểm tra. ✅ ${okCount} truyện sẵn sàng.`;
+                    } else {
+                        document.getElementById('cu-status-msg').innerText = `✅ ${okCount} truyện sẵn sàng upload. ⚠ ${warnCount} truyện cần kiểm tra (dùng "Vẫn Upload" để bỏ qua lỗi).`;
+                    }
+                }
+
+            } catch(e) {
+                document.getElementById('cu-status-msg').innerText = '❌ Lỗi: ' + e.message;
+            } finally {
+                spinner.classList.add('hidden');
+                btn.disabled = false;
+            }
+        }
+
+        async function doUpload(skipErrors) {
+            if (checkResults.length === 0) return alert('Hãy CHECK trước khi upload!');
+
+            const webUrl = document.getElementById('cu-web-url').value.trim().replace(/\/$/, '');
+            const secret = document.getElementById('cu-secret').value.trim();
+            if (!webUrl) return alert('Chưa nhập Web App URL!');
+            if (!secret) return alert('Chưa nhập Secret Key!');
+
+            // Hide buttons, show progress
+            document.getElementById('btn-do-upload-ok').classList.add('hidden');
+            document.getElementById('btn-do-upload-warn').classList.add('hidden');
+            document.getElementById('btn-do-check').disabled = true;
+            document.getElementById('cu-upload-progress').classList.remove('hidden');
+
+            const logEl = document.getElementById('cu-progress-log');
+            const barEl = document.getElementById('cu-progress-bar');
+            const pctEl = document.getElementById('cu-progress-pct');
+            const labelEl = document.getElementById('cu-progress-label');
+            logEl.innerHTML = '';
+
+            const addLog = (msg, color='text-slate-400') => {
+                const d = document.createElement('div');
+                d.className = color;
+                d.innerText = msg;
+                logEl.appendChild(d);
+                logEl.scrollTop = logEl.scrollHeight;
+            };
+
+            const storiesToUpload = checkResults.filter(r => {
+                if (r.total_files === 0 || r.delta <= 0) return false;
+                const hasWarn = (r.missing_indexes && r.missing_indexes.length > 0) || (r.error_chapters && r.error_chapters.length > 0);
+                if (skipErrors) {
+                    return hasWarn; // Nút "Vẫn Upload" → chỉ chạy truyện bị cảnh báo
+                } else {
+                    return !hasWarn; // Nút "Upload" → chỉ chạy truyện OK
+                }
+            });
+            let done = 0;
+
+            for (const story of storiesToUpload) {
+                const batchSize = parseInt(document.getElementById('cu-batch-size').value) || 50;
+                const totalBatches = Math.ceil(story.delta / batchSize);
+                labelEl.innerText = `Upload: ${story.title}`;
+                addLog(`▶ Bắt đầu: ${story.title} (${story.delta} chương | ${totalBatches} batch)`);
+
+                try {
+                    const res = await fetch('/api', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            action: 'do_upload',
+                            story_id: story.id,
+                            web_url: webUrl,
+                            secret: secret,
+                            skip_errors: skipErrors,
+                            min_chars: parseInt(document.getElementById('cu-min-chars').value) || 500,
+                            batch_size: batchSize
+                        })
+                    });
+                    const result = await res.json();
+
+                    if (result.success) {
+                        // Hiển thị log từng batch từ Python
+                        if (result.batch_logs && result.batch_logs.length > 0) {
+                            result.batch_logs.forEach(log => addLog(log.msg, log.ok ? 'text-green-400' : 'text-red-400'));
+                        }
+                        addLog(`  🎯 Hoàn tất: ${result.inserted} chương — ${story.title}`, 'text-teal-400 font-bold');
+                        const statusEl = document.getElementById(`cu-status-${story.id}`);
+                        if (statusEl) statusEl.innerHTML = `<span class="text-green-400 font-bold">✅ Đã upload ${result.inserted} chương</span>`;
+                    } else {
+                        addLog(`  ❌ Lỗi: ${result.message} — ${story.title}`, 'text-red-400');
+                    }
+                } catch(e) {
+                    addLog(`  ❌ Kết nối thất bại: ${e.message}`, 'text-red-400');
+                }
+
+                done++;
+                const pct = Math.round((done / storiesToUpload.length) * 100);
+                barEl.style.width = pct + '%';
+                pctEl.innerText = pct + '%';
+            }
+
+            labelEl.innerText = `Hoàn tất! ${done}/${storiesToUpload.length} truyện đã xử lý.`;
+            addLog(`\n🎉 Upload hoàn tất.`, 'text-teal-400 font-bold');
+            document.getElementById('btn-do-check').disabled = false;
+            loadStories();
+        }
+
+
+
+        async function openStoryFolder(storyId) {
+            await fetch('/api', {
+                method: 'POST',
+                body: JSON.stringify({ action: 'open_story_folder', id: storyId })
+            });
+        }
+
+        window.onload = () => {
+            checkLogin();
+            applySourceStyle(currentSource);
+            loadCategories();
+            loadCheckCache().then(() => loadStories());
+        };
+        let foundUpdates = [];
+        async function scanUpdates() {
+            const btn = document.getElementById('btn-scan-update');
+            const status = document.getElementById('scan-status');
+            const spinner = document.getElementById('scan-spinner');
+            
+            btn.disabled = true; spinner.classList.remove('hidden');
+            status.innerText = "Đang khởi động tiến trình quét...";
+            
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'scan_updates'})});
+                const data = await res.json();
+                if(data.success) {
+                    status.innerText = "Scanner is running... Please wait...";
+                    pollUpdateStatus();
+                } else {
+                    alert('Error starting scan');
+                    resetScanUI();
+                }
+            } catch(e) { resetScanUI(); }
+        }
+        
+        async function pollUpdateStatus() {
+             const status = document.getElementById('scan-status');
+             const interval = setInterval(async () => {
+                 try {
+                     const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'check_update_status'})});
+                     const data = await res.json();
+                     
+                     if (data.status === 'finished') {
+                         clearInterval(interval);
+                         resetScanUI();
+                         renderUpdates(data.results);
+                         status.innerText = `Hoàn tất. Tìm thấy ${data.results.length} truyện có chương mới.`;
+                     } else {
+                         status.innerText = "Đang quét... (" + new Date().toLocaleTimeString() + ")";
+                     }
+                 } catch(e) { clearInterval(interval); resetScanUI(); }
+             }, 2000);
+        }
+        
+        function resetScanUI() {
+            document.getElementById('btn-scan-update').disabled = false;
+            document.getElementById('scan-spinner').classList.add('hidden');
+        }
+        
+        let ongoingStories = []; // Stores the full list from DB
+        let scanResultsMap = {}; // Stores scan results by ID
+
+        async function loadUpdateList() {
+            const statusDiv = document.getElementById('scan-status');
+            statusDiv.innerText = "Đang tải danh sách truyện...";
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'get_ongoing', source: currentSource})});
+                const data = await res.json();
+                if(data.success) {
+                    ongoingStories = data.stories;
+                    statusDiv.innerText = `Danh sách: ${ongoingStories.length} truyện.`;
+                    renderUpdateTable();
+                } else {
+                     statusDiv.innerText = "Lỗi tải API: " + JSON.stringify(data);
+                    console.error("API Error: ", data);
+                }
+            } catch(e) {
+                statusDiv.innerText = "Lỗi kết nối: " + e;
+                console.error("Fetch Error: ", e);
+            }
+        }
+
+        function renderUpdateTable() {
+             const tbody = document.getElementById('update-list');
+             const empty = document.getElementById('update-empty');
+             const btnQueue = document.getElementById('btn-queue-update'); // Get the button here
+             tbody.innerHTML = '';
+             
+             if (ongoingStories.length === 0) {
+                 empty.classList.remove('hidden');
+                 btnQueue.classList.add('hidden'); // Hide button if no stories
+                 return;
+             }
+             empty.classList.add('hidden');
+             
+             let updatesFound = 0; // Track if any updates are found to show/hide queue button
+             
+             ongoingStories.forEach(s => {
+                 const update = scanResultsMap[s.id];
+                 const hasUpdate = update && update.diff > 0;
+                 const isChecked = hasUpdate; // Auto-check if update found
+                 
+                 if (hasUpdate) updatesFound++;
+                 
+                 const tr = document.createElement('tr');
+                 tr.className = hasUpdate ? "bg-green-900/30 border-b border-green-700/50" : "border-b border-white/5 opacity-70";
+                 
+                 tr.innerHTML = `
+                    <td class="p-3"><input type="checkbox" class="update-ck" value="${s.id}" ${isChecked ? 'checked' : ''} ${hasUpdate ? '' : 'disabled'}></td>
+                    <td class="p-3">
+                        <div class="font-bold text-slate-200">${s.title}</div>
+                        <div class="text-[10px] text-slate-500">${s.source} | ${s.book_status}</div>
+                    </td>
+                    <td class="p-3 text-right font-mono">
+                        <div class="text-slate-400">DB: ${s.chapters}</div> 
+                    </td>
+                    <td class="p-3 text-right font-mono">
+                         ${hasUpdate ? `<div class="text-green-400 font-bold">New: ${update.new_chapters} (+${update.diff})</div>` : '<span class="text-slate-600">--</span>'}
+                    </td>
+                 `;
+                 if(hasUpdate) {
+                     // Store full update data attached to checkbox value for later retrieval? 
+                     // No, better to use the map in addUpdateQueue
+                 }
+                 tbody.appendChild(tr);
+             });
+             
+             // Show/hide queue button based on updatesFound
+             if (updatesFound > 0) {
+                 btnQueue.innerText = `ĐẨY ${updatesFound} TRUYỆN VÀO HÀNG ĐỢI`;
+                 btnQueue.disabled = false;
+                 btnQueue.classList.remove('hidden');
+             } else {
+                 btnQueue.classList.add('hidden');
+             }
+        }
+
+        function renderUpdates(items) {
+            // items is the list of results from check_update.py
+            scanResultsMap = {};
+            items.forEach(item => {
+                scanResultsMap[item.id] = item;
+            });
+            renderUpdateTable(); // Re-render with new data
+            
+            // Re-enable queue button if any updates
+            if (items.length > 0) {
+                 const btnQueue = document.getElementById('btn-queue-update');
+                 btnQueue.innerText = `ĐẨY ${items.length} TRUYỆN VÀO HÀNG ĐỢI`;
+                 btnQueue.disabled = false;
+                 btnQueue.classList.remove('hidden');
+            }
+        }
+        
+        function toggleAllUpdates(checked) {
+            document.querySelectorAll('.update-ck').forEach(c => c.checked = checked);
+        }
+        
+        async function addUpdateQueue() {
+            const checkboxes = document.querySelectorAll('.update-ck:checked');
+            if (checkboxes.length === 0) return alert("Chưa chọn truyện nào!");
+            
+            const selectedItems = Array.from(checkboxes).map(c => scanResultsMap[parseInt(c.value)]);
+            const btn = document.getElementById('btn-queue-update');
+            btn.innerText = "Processing..."; btn.disabled = true;
+            
+            try {
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'apply_updates', items: selectedItems})});
+                const data = await res.json();
+                alert(`Đã cập nhật ${data.updated} truyện vào hàng đợi!`);
+                btn.classList.add('hidden');
+                document.getElementById('update-list').innerHTML = '';
+                document.getElementById('update-empty').classList.remove('hidden');
+            } catch(e) { alert("Lỗi: " + e); }
+            finally {
+                btn.innerText = "ĐẨY VÀO HÀNG ĐỢI (QUEUE SELECTED)"; btn.disabled = false;
+            }
+        }
+
+    </script>
+
+    <!-- Agent Status Badge -->
+    <div id="agent-status-badge" style="position:fixed;bottom:12px;right:12px;z-index:9999;background:#1e293b;border:1px solid #334155;border-radius:99px;padding:6px 14px;font-size:11px;font-weight:700;color:#94a3b8;display:flex;align-items:center;gap:6px;">
+      <span id="agent-dot" style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block;"></span>
+      <span id="agent-label">Agent: offline</span>
+    </div>
+    <script>
+    // Poll agent heartbeat từ DB
+    async function checkAgentStatus() {
+        try {
+            const res = await fetch('/api/agent?action=poll', {headers: {'X-Agent-Secret': localStorage.getItem('agent_secret') || ''}});
+        } catch(e) {}
+        // Check kv heartbeat
+        try {
+            const res = await fetch('/api?action=agent_status');
+            if (res.ok) {
+                const d = await res.json();
+                const dot = document.getElementById('agent-dot');
+                const lbl = document.getElementById('agent-label');
+                if (d.online) {
+                    dot.style.background = '#10b981';
+                    lbl.innerText = 'Agent: online (' + (d.running || 0) + ' scrapers)';
+                } else {
+                    dot.style.background = '#ef4444';
+                    lbl.innerText = 'Agent: offline';
+                }
+            }
+        } catch(e) {}
+    }
+    setInterval(checkAgentStatus, 10000);
+    checkAgentStatus();
+    </script>
+</body>
+</html>
