@@ -99,9 +99,26 @@ class handler(BaseHTTPRequestHandler):
                 if book_status == 'Full':    where.append("book_status = 'Full'")
                 elif book_status == 'Ongoing': where.append("book_status != 'Full'")
 
+                # Mặc định (không filter status cụ thể): ẩn truyện đã upload >= 100% downloaded
+                if not status:
+                    where.append(
+                        "NOT (COALESCE(downloaded_chapters,0) > 0 AND COALESCE(uploaded_chapters,0) >= COALESCE(downloaded_chapters,0))"
+                    )
+
                 w = ('WHERE ' + ' AND '.join(where)) if where else ''
 
-                cur.execute(f"SELECT * FROM stories {w} ORDER BY CASE WHEN COALESCE(uploaded_chapters,0)>0 AND COALESCE(uploaded_chapters,0)>=COALESCE(downloaded_chapters,0) THEN 1 ELSE 0 END ASC, CASE crawl_status WHEN 'crawling' THEN 0 WHEN 'repairing' THEN 1 WHEN 'selected' THEN 2 WHEN 'paused' THEN 3 WHEN 'error' THEN 4 WHEN 'pending' THEN 5 WHEN 'completed' THEN 6 ELSE 5 END ASC, last_updated DESC LIMIT %s OFFSET %s", args + [limit, offset])
+                # Sort toàn DB theo % tiến độ web (uploaded/downloaded) giảm dần — gần 100% lên đầu
+                order = (
+                    "CASE WHEN COALESCE(downloaded_chapters,0) = 0 THEN 1 ELSE 0 END ASC, "
+                    "COALESCE(uploaded_chapters,0)::float / NULLIF(COALESCE(downloaded_chapters,0),0) DESC, "
+                    "CASE crawl_status "
+                    "WHEN 'crawling' THEN 0 WHEN 'repairing' THEN 1 WHEN 'selected' THEN 2 "
+                    "WHEN 'paused' THEN 3 WHEN 'error' THEN 4 WHEN 'pending' THEN 5 "
+                    "WHEN 'completed' THEN 6 ELSE 5 END ASC, "
+                    "last_updated DESC"
+                )
+
+                cur.execute(f"SELECT * FROM stories {w} ORDER BY {order} LIMIT %s OFFSET %s", args + [limit, offset])
                 stories = [dict(r) for r in cur.fetchall()]
 
                 cur.execute(f"SELECT COUNT(*) AS total FROM stories {w}", args)
@@ -211,19 +228,6 @@ class handler(BaseHTTPRequestHandler):
                     self._json({'story_id': None})
 
             # ── agent status (heartbeat check) ──────────────────────────────
-            elif action == 'list_queue':
-                admin = params.get('admin', [None])[0]
-                order = ("CASE WHEN COALESCE(uploaded_chapters,0)>0 AND COALESCE(uploaded_chapters,0)>=COALESCE(downloaded_chapters,0) THEN 1 ELSE 0 END ASC,"
-                         " CASE crawl_status WHEN 'crawling' THEN 0 WHEN 'repairing' THEN 1 WHEN 'selected' THEN 2"
-                         " WHEN 'paused' THEN 3 WHEN 'error' THEN 4 WHEN 'pending' THEN 5 WHEN 'completed' THEN 6 ELSE 5 END ASC, last_updated DESC")
-                sql = ("SELECT id, slug, title, chapters, crawl_status, downloaded_chapters, uploaded_chapters"
-                       " FROM stories WHERE crawl_status IN ('selected', 'repairing')")
-                if admin:
-                    cur.execute(sql + " AND (admin_control = %s OR admin_control IS NULL OR admin_control = '') ORDER BY " + order, (admin,))
-                else:
-                    cur.execute(sql + " ORDER BY " + order)
-                self._json({'stories': [dict(r) for r in cur.fetchall()]})
-
             elif action == 'agent_status':
                 import datetime
                 cur.execute("SELECT value FROM agent_kv WHERE key='heartbeat'")
@@ -445,11 +449,8 @@ class handler(BaseHTTPRequestHandler):
                 ids = data.get('ids', [])
                 if ids:
                     cur.execute("UPDATE stories SET last_account_idx=NULL, last_updated=NOW() WHERE id = ANY(%s)", (ids,))
-                else:
-                    cur.execute("UPDATE stories SET last_account_idx=NULL, last_updated=NOW()")
-                conn.commit()
-                updated = cur.rowcount
-                self._json({'success': True, 'updated': updated})
+                    conn.commit()
+                self._json({'success': True, 'updated': len(ids)})
 
             elif action == 'batch_change_status':
                 ids    = data.get('ids', [])
