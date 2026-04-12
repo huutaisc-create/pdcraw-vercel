@@ -234,7 +234,8 @@ class handler(BaseHTTPRequestHandler):
                              WHEN crawl_status='selected' AND last_account_idx=%s THEN 2
                              WHEN crawl_status='selected' AND (last_account_idx IS NULL OR last_account_idx = -1) THEN 3
                              ELSE 4 END,
-                        last_updated ASC
+                        CASE WHEN COALESCE(chapters,0) > 0 THEN CAST(COALESCE(downloaded_chapters,0) AS numeric) / COALESCE(chapters,0) ELSE -1 END DESC,
+                        id ASC
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 """, [acc_idx, acc_idx, machine_label] + f_args + [acc_idx, acc_idx])
