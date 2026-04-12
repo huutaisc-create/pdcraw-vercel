@@ -165,6 +165,7 @@ class handler(BaseHTTPRequestHandler):
                 status_val       = data.get('crawl_status')
                 uploaded         = data.get('uploaded_chapters')
                 actual           = data.get('actual_chapters')
+                chapters         = data.get('chapters')
                 meta_status      = data.get('meta_status', '__unset__')
                 storage_label    = data.get('storage_label', '__unset__')
                 sets, args = [], []
@@ -172,6 +173,7 @@ class handler(BaseHTTPRequestHandler):
                 if status_val:                   sets.append("crawl_status=%s");         args.append(status_val)
                 if uploaded is not None:         sets.append("uploaded_chapters=%s");    args.append(uploaded)
                 if actual is not None:           sets.append("actual_chapters=%s");      args.append(actual)
+                if chapters is not None:         sets.append("chapters=%s");             args.append(chapters)
                 if meta_status != '__unset__':   sets.append("meta_status=%s");          args.append(meta_status)
                 if storage_label != '__unset__': sets.append("storage_label=%s");        args.append(storage_label or None)
                 if sets:
