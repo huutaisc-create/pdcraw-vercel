@@ -99,7 +99,7 @@ class handler(BaseHTTPRequestHandler):
                 if book_status == 'Full':    where.append("book_status = 'Full'")
                 elif book_status == 'Ongoing': where.append("book_status != 'Full'")
 
-                # Mặc định (không filter status cụ thể): ẩn truyện đã upload >= 100% downloaded
+                # Mặc định (không filter status): ẩn truyện upload >= downloaded, nhưng chỉ khi downloaded > 0
                 if not status:
                     where.append(
                         "NOT (COALESCE(downloaded_chapters,0) > 0 AND COALESCE(uploaded_chapters,0) >= COALESCE(downloaded_chapters,0))"
@@ -107,10 +107,11 @@ class handler(BaseHTTPRequestHandler):
 
                 w = ('WHERE ' + ' AND '.join(where)) if where else ''
 
-                # Sort toàn DB theo % tiến độ web (uploaded/downloaded) giảm dần — gần 100% lên đầu
+                # Sort: % upload cao nhất lên đầu (gần xong trước), truyện chưa có downloaded xuống cuối
                 order = (
-                    "CASE WHEN COALESCE(downloaded_chapters,0) = 0 THEN 1 ELSE 0 END ASC, "
-                    "COALESCE(uploaded_chapters,0)::float / NULLIF(COALESCE(downloaded_chapters,0),0) DESC, "
+                    "CASE WHEN COALESCE(downloaded_chapters,0) > 0 "
+                    "     THEN COALESCE(uploaded_chapters,0)::float / COALESCE(downloaded_chapters,0) "
+                    "     ELSE -1 END DESC, "
                     "CASE crawl_status "
                     "WHEN 'crawling' THEN 0 WHEN 'repairing' THEN 1 WHEN 'selected' THEN 2 "
                     "WHEN 'paused' THEN 3 WHEN 'error' THEN 4 WHEN 'pending' THEN 5 "
