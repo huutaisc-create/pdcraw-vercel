@@ -211,6 +211,19 @@ class handler(BaseHTTPRequestHandler):
                     self._json({'story_id': None})
 
             # ── agent status (heartbeat check) ──────────────────────────────
+            elif action == 'list_queue':
+                admin = params.get('admin', [None])[0]
+                order = ("CASE WHEN COALESCE(uploaded_chapters,0)>0 AND COALESCE(uploaded_chapters,0)>=COALESCE(downloaded_chapters,0) THEN 1 ELSE 0 END ASC,"
+                         " CASE crawl_status WHEN 'crawling' THEN 0 WHEN 'repairing' THEN 1 WHEN 'selected' THEN 2"
+                         " WHEN 'paused' THEN 3 WHEN 'error' THEN 4 WHEN 'pending' THEN 5 WHEN 'completed' THEN 6 ELSE 5 END ASC, last_updated DESC")
+                sql = ("SELECT id, slug, title, chapters, crawl_status, downloaded_chapters, uploaded_chapters"
+                       " FROM stories WHERE crawl_status IN ('selected', 'repairing')")
+                if admin:
+                    cur.execute(sql + " AND (admin_control = %s OR admin_control IS NULL OR admin_control = '') ORDER BY " + order, (admin,))
+                else:
+                    cur.execute(sql + " ORDER BY " + order)
+                self._json({'stories': [dict(r) for r in cur.fetchall()]})
+
             elif action == 'agent_status':
                 import datetime
                 cur.execute("SELECT value FROM agent_kv WHERE key='heartbeat'")
@@ -432,8 +445,11 @@ class handler(BaseHTTPRequestHandler):
                 ids = data.get('ids', [])
                 if ids:
                     cur.execute("UPDATE stories SET last_account_idx=NULL, last_updated=NOW() WHERE id = ANY(%s)", (ids,))
-                    conn.commit()
-                self._json({'success': True, 'updated': len(ids)})
+                else:
+                    cur.execute("UPDATE stories SET last_account_idx=NULL, last_updated=NOW()")
+                conn.commit()
+                updated = cur.rowcount
+                self._json({'success': True, 'updated': updated})
 
             elif action == 'batch_change_status':
                 ids    = data.get('ids', [])

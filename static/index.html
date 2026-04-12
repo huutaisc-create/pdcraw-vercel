@@ -47,7 +47,7 @@
                     </nav>
 
                     <div class="px-4 py-1 bg-slate-800 rounded-full border border-slate-700 text-[10px] font-bold text-slate-400 flex gap-3">
-                         <span>HÀNG ĐỢI: <span id="stat-queue" class="text-white">0</span></span>
+                         <span>HÀNG ĐỢI: <span id="stat-queue" class="text-white cursor-pointer hover:text-orange-400 transition-colors" onclick="openQueueModal()" title="Xem danh sách hàng đợi">0</span></span>
                          <span class="w-px h-3 bg-slate-600"></span>
                          <span>ĐANG CHẠY: <span id="stat-run" class="text-white">0</span></span>
                     </div>
@@ -469,6 +469,19 @@
             <div class="flex gap-3">
                 <button onclick="doImportLocalData()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-sm transition-all active:scale-95">Ghi nhận</button>
                 <button onclick="document.getElementById('modal-import-local').classList.add('hidden')" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded text-sm transition-all active:scale-95">Huỷ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Danh sách truyện trong hàng đợi -->
+    <div id="modal-queue-stories" class="fixed inset-0 bg-black/90 hidden flex items-start justify-center z-50 backdrop-blur-sm overflow-y-auto">
+        <div class="glass p-6 rounded-2xl w-full max-w-3xl border border-orange-500/30 shadow-[0_0_60px_rgba(249,115,22,0.1)] my-8 mx-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-orange-400">📋 Hàng đợi của tôi (<span id="queue-modal-count">0</span> truyện)</h3>
+                <button onclick="document.getElementById('modal-queue-stories').classList.add('hidden')" class="text-slate-500 hover:text-white text-2xl leading-none transition-colors">✕</button>
+            </div>
+            <div id="queue-modal-list" class="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
+                <p class="text-slate-500 text-sm text-center py-8">Đang tải...</p>
             </div>
         </div>
     </div>
@@ -1115,6 +1128,79 @@
             document.getElementById(id).classList.add('hidden');
             if (id === 'modal-check-upload') pauseAutoRefresh = false;
         }
+
+        async function openQueueModal() {
+            const modal = document.getElementById('modal-queue-stories');
+            const listEl = document.getElementById('queue-modal-list');
+            const countEl = document.getElementById('queue-modal-count');
+            modal.classList.remove('hidden');
+            await _renderQueueList(listEl, countEl);
+        }
+
+        async function _renderQueueList(listEl, countEl) {
+            listEl.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Đang tải...</p>';
+            try {
+                const admin = localStorage.getItem('admin_name') || '';
+                const res = await fetch(`/api?action=list_queue&admin=${encodeURIComponent(admin)}`);
+                const data = await res.json();
+                const stories = data.stories || [];
+                countEl.innerText = stories.length;
+                if (stories.length === 0) {
+                    listEl.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Không có truyện nào trong hàng đợi.</p>';
+                    return;
+                }
+                listEl.innerHTML = stories.map((s, i) => `
+                    <div id="queue-row-${s.id}" class="flex items-center gap-3 bg-slate-800/60 rounded-lg px-4 py-3 border border-slate-700/50">
+                        <span class="text-slate-600 text-xs font-bold w-5 shrink-0">${i+1}</span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-white text-sm font-bold truncate">${s.title || s.slug}</div>
+                            <div class="text-slate-500 text-[11px] mt-0.5">${s.slug} &middot; ${s.downloaded_chapters || 0}/${s.chapters || '?'} chương</div>
+                        </div>
+                        <span class="status-badge ${s.crawl_status === 'repairing' ? 'status-repairing' : 'status-selected'} shrink-0 mr-1">${s.crawl_status}</span>
+                        <button onclick="removeFromQueue(${s.id}, ${s.downloaded_chapters || 0})"
+                            class="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-slate-700 hover:bg-red-600 text-slate-300 hover:text-white transition-all active:scale-95"
+                            title="Bỏ khỏi hàng đợi">✕ BỎ</button>
+                    </div>
+                `).join('');
+            } catch(e) {
+                listEl.innerHTML = `<p class="text-red-400 text-sm text-center py-8">Lỗi: ${e.message}</p>`;
+            }
+        }
+
+        async function removeFromQueue(storyId, downloadedChapters) {
+            const row = document.getElementById('queue-row-' + storyId);
+            if (row) {
+                row.style.opacity = '0.4';
+                row.style.pointerEvents = 'none';
+            }
+            try {
+                const admin = localStorage.getItem('admin_name') || '';
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'toggle_select', id: storyId, selected: false, admin })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    // Xóa row khỏi modal ngay, cập nhật count
+                    if (row) row.remove();
+                    const countEl = document.getElementById('queue-modal-count');
+                    const listEl = document.getElementById('queue-modal-list');
+                    const remaining = listEl.querySelectorAll('[id^="queue-row-"]').length;
+                    countEl.innerText = remaining;
+                    if (remaining === 0) {
+                        listEl.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Không có truyện nào trong hàng đợi.</p>';
+                    }
+                    // Cập nhật bảng chính ngầm
+                    loadStories();
+                } else {
+                    if (row) { row.style.opacity = '1'; row.style.pointerEvents = ''; }
+                    showToast('❌ Lỗi bỏ truyện khỏi hàng đợi', 'red');
+                }
+            } catch(e) {
+                if (row) { row.style.opacity = '1'; row.style.pointerEvents = ''; }
+                showToast('❌ ' + e.message, 'red');
+            }
+        }
         
         async function confirmOverwrite() {
             const checkboxes = document.querySelectorAll('.conflict-ck:checked');
@@ -1484,14 +1570,11 @@
         }
 
         async function resetBot() {
-            const checked = document.querySelectorAll('.story-ck:checked');
-            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
-            const ids = Array.from(checked).map(c => parseInt(c.value));
-            if (!confirm(`Reset bot cho ${ids.length} truyện đã chọn?`)) return;
+            if (!confirm(`Reset bot cho TẤT CẢ truyện? (last_account_idx = NULL)`)) return;
             try {
-                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'reset_bot', ids }) });
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'reset_bot', ids: [] }) });
                 const data = await res.json();
-                showToast(`✅ Đã reset bot cho ${data.updated ?? ids.length} truyện`, 'green');
+                showToast(`✅ Đã reset bot cho ${data.updated ?? 'tất cả'} truyện`, 'green');
                 loadStories();
             } catch(e) { showToast('❌ Lỗi: ' + e.message, 'red'); }
         }
