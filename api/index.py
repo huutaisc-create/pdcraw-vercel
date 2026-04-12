@@ -98,21 +98,21 @@ class handler(BaseHTTPRequestHandler):
                 if book_status == 'Full':    where.append("book_status = 'Full'")
                 elif book_status == 'Ongoing': where.append("book_status != 'Full'")
 
-                # Filter status: 'uploaded_done' là filter riêng cho truyện đã upload xong
-                if status == 'uploaded_done':
-                    where.append("COALESCE(downloaded_chapters,0) > 0 AND COALESCE(uploaded_chapters,0) >= COALESCE(downloaded_chapters,0)")
+                # Filter status: 'crawl_done' = truyện đã cào xong 100%
+                if status == 'crawl_done':
+                    where.append("COALESCE(chapters,0) > 0 AND CAST(COALESCE(downloaded_chapters,0) AS numeric) / COALESCE(chapters,0) >= 0.99")
                 elif status:
                     where.append("crawl_status = %s"); args.append(status)
                 else:
-                    # Mặc định: ẩn truyện đã upload >= downloaded
-                    where.append("NOT (COALESCE(downloaded_chapters,0) > 0 AND COALESCE(uploaded_chapters,0) >= COALESCE(downloaded_chapters,0))")
+                    # Mặc định: ẩn truyện đã cào >= 99% (bỏ qua vài chương lẻ cuối)
+                    where.append("NOT (COALESCE(chapters,0) > 0 AND CAST(COALESCE(downloaded_chapters,0) AS numeric) / COALESCE(chapters,0) >= 0.99)")
 
                 w = ('WHERE ' + ' AND '.join(where)) if where else ''
 
-                # Sort toàn DB: % upload/downloaded cao nhất lên đầu, chưa có downloaded xuống cuối
+                # Sort toàn DB: % cào (downloaded/chapters) giảm dần — gần xong lên đầu, chưa có chapters xuống cuối
                 order = (
-                    "CASE WHEN COALESCE(downloaded_chapters,0) > 0 "
-                    "     THEN CAST(COALESCE(uploaded_chapters,0) AS numeric) / COALESCE(downloaded_chapters,0) "
+                    "CASE WHEN COALESCE(chapters,0) > 0 "
+                    "     THEN CAST(COALESCE(downloaded_chapters,0) AS numeric) / COALESCE(chapters,0) "
                     "     ELSE -1 END DESC, "
                     "id ASC"
                 )
