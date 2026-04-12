@@ -1,0 +1,26 @@
+=== META-ALL LOG === 2026-04-12 08:09:11
+Tổng DB: 1626 | Cần xử lý: 299 | Bỏ qua (đủ data): 1327
+Kết quả: 0 tạo mới | 292 cập nhật | 7 lỗi
+
+=== DANH SÁCH LỖI (7 truyện) ===
+1. [ID 994] Nông trại nhà ta có một con rồng
+   URL   : 
+   Lý do : Không tìm thấy thư mục local
+2. [ID 1010] Cao Võ: Bình Tĩnh Một Chút, Người Ta Vẫn Gọi Ta Là Tai Ách Cấp
+   URL   : 
+   Lý do : Không tìm thấy thư mục local
+3. [ID 1012] Ngự Thú Chi Vương
+   URL   : 
+   Lý do : Không tìm thấy thư mục local
+4. [ID 1284] Hảo Hữu Tử Vong: Ta Tu Vi Lại Tăng Lên [C]
+   URL   : 
+   Lý do : Không tìm thấy thư mục local
+5. [ID 1507] Phần Mềm Treo Máy: Ta Bất Tri Bất Giác Liền Vô Địch
+   URL   : 
+   Lý do : Không tìm thấy thư mục local
+6. [ID 3639] mu-loa-troc-dao-nhan-bat-dau-max-cap-cuu-duong-than-cong
+   URL   : 
+   Lý do : Không có URL trong DB
+7. [ID 3668] vot-thi-nhan
+   URL   : 
+   Lý do : Không có URL trong DB

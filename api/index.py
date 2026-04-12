@@ -94,29 +94,27 @@ class handler(BaseHTTPRequestHandler):
                 where, args = [], []
                 if source:      where.append("source = %s");                    args.append(source)
                 if search:      where.append("(title ILIKE %s OR slug ILIKE %s)"); args += [f'%{search}%', f'%{search}%']
-                if status:      where.append("crawl_status = %s");              args.append(status)
                 if category:    where.append("category = %s");                  args.append(category)
                 if book_status == 'Full':    where.append("book_status = 'Full'")
                 elif book_status == 'Ongoing': where.append("book_status != 'Full'")
 
-                # Mặc định (không filter status): ẩn truyện upload >= downloaded, nhưng chỉ khi downloaded > 0
-                if not status:
-                    where.append(
-                        "NOT (COALESCE(downloaded_chapters,0) > 0 AND COALESCE(uploaded_chapters,0) >= COALESCE(downloaded_chapters,0))"
-                    )
+                # Filter status: 'uploaded_done' là filter riêng cho truyện đã upload xong
+                if status == 'uploaded_done':
+                    where.append("COALESCE(downloaded_chapters,0) > 0 AND COALESCE(uploaded_chapters,0) >= COALESCE(downloaded_chapters,0)")
+                elif status:
+                    where.append("crawl_status = %s"); args.append(status)
+                else:
+                    # Mặc định: ẩn truyện đã upload >= downloaded
+                    where.append("NOT (COALESCE(downloaded_chapters,0) > 0 AND COALESCE(uploaded_chapters,0) >= COALESCE(downloaded_chapters,0))")
 
                 w = ('WHERE ' + ' AND '.join(where)) if where else ''
 
-                # Sort: % upload cao nhất lên đầu (gần xong trước), truyện chưa có downloaded xuống cuối
+                # Sort toàn DB: % upload/downloaded cao nhất lên đầu, chưa có downloaded xuống cuối
                 order = (
                     "CASE WHEN COALESCE(downloaded_chapters,0) > 0 "
-                    "     THEN COALESCE(uploaded_chapters,0)::float / COALESCE(downloaded_chapters,0) "
+                    "     THEN CAST(COALESCE(uploaded_chapters,0) AS numeric) / COALESCE(downloaded_chapters,0) "
                     "     ELSE -1 END DESC, "
-                    "CASE crawl_status "
-                    "WHEN 'crawling' THEN 0 WHEN 'repairing' THEN 1 WHEN 'selected' THEN 2 "
-                    "WHEN 'paused' THEN 3 WHEN 'error' THEN 4 WHEN 'pending' THEN 5 "
-                    "WHEN 'completed' THEN 6 ELSE 5 END ASC, "
-                    "last_updated DESC"
+                    "id ASC"
                 )
 
                 cur.execute(f"SELECT * FROM stories {w} ORDER BY {order} LIMIT %s OFFSET %s", args + [limit, offset])

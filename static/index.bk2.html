@@ -111,7 +111,6 @@
                                 <option value="completed">Đã xong</option>
                                 <option value="repairing">Repairing</option>
                                 <option value="error">Lỗi</option>
-                                <option value="uploaded_done">✅ Đã upload xong</option>
                             </select>
                              <select id="check-filter" class="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs outline-none text-amber-400 font-bold" onchange="loadStories()">
                                 <option value="" class="text-slate-400 font-normal">Tất cả nhãn</option>
@@ -730,13 +729,54 @@
                 const checkAllEl = document.getElementById('check-all');
                 const prevCheckAll = checkAllEl ? checkAllEl.checked : false;
 
-                // Filter nhãn kiểm tra (client-side vì checkCache lưu ở JS)
+                // Filter theo nhãn kiểm tra (client-side vì checkCache lưu ở JS)
                 const checkFilter = document.getElementById('check-filter').value;
+                const statusFilter = document.getElementById('status-filter').value;
                 let stories = data.stories;
                 if (checkFilter) {
                     stories = stories.filter(s => checkCache[s.id] && checkCache[s.id].status === checkFilter);
                 }
-                // Sort và filter hoàn thành do backend xử lý — không sort lại ở đây
+
+                // Ẩn truyện đã hoàn thành (completed hoặc tiến độ >=100%) khi "Tất cả trạng thái"
+                if (!statusFilter) {
+                    stories = stories.filter(s => {
+                        if (s.crawl_status === 'completed') return false;
+                        const total = s.chapters || 0;
+                        const current = s.downloaded_chapters || 0;
+                        const is100 = total > 0 && current >= total;
+                        return !is100;
+                    });
+                }
+
+                // ── SẮP XẾP: Truyện hoạt động gần đây lên trên, completed xuống cuối ──
+                // Thứ tự ưu tiên: crawling > repairing > selected > paused > error > pending > completed
+                const STATUS_PRIORITY = {
+                    'crawling':  0,
+                    'repairing': 1,
+                    'selected':  2,
+                    'paused':    3,
+                    'error':     4,
+                    'pending':   5,
+                    'completed': 6,
+                };
+                stories = stories.slice().sort((a, b) => {
+                    // Thấy nhãn ✓ SYNC → đưa xuống cuối, không xét gì thêm
+                    const isSyncA = (a.uploaded_chapters||0) > 0 && Math.max(0, (a.downloaded_chapters||0) - (a.uploaded_chapters||0)) === 0;
+                    const isSyncB = (b.uploaded_chapters||0) > 0 && Math.max(0, (b.downloaded_chapters||0) - (b.uploaded_chapters||0)) === 0;
+                    if (isSyncA !== isSyncB) return isSyncA ? 1 : -1;
+
+                    const pa = STATUS_PRIORITY[a.crawl_status] ?? 5;
+                    const pb = STATUS_PRIORITY[b.crawl_status] ?? 5;
+                    if (pa !== pb) return pa - pb;
+
+                    // Cùng nhóm → ưu tiên tiến độ cao hơn lên đầu (dang dở nhiều hơn lên trước)
+                    const progA = (a.chapters || 0) > 0 ? (a.downloaded_chapters || 0) / a.chapters : 0;
+                    const progB = (b.chapters || 0) > 0 ? (b.downloaded_chapters || 0) / b.chapters : 0;
+                    if (progB !== progA) return progB - progA;
+
+                    // Cùng tiến độ → id mới hơn lên trên
+                    return b.id - a.id;
+                });
 
                 list.innerHTML = '';
                 // data is now accessible here
