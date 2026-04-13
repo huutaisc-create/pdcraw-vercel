@@ -71,6 +71,11 @@ CREATE INDEX IF NOT EXISTS idx_stories_storage_label ON stories(storage_label);
 -- NULL = chưa xử lý, 'no_chapter_names' = không có tên chương, 'ready' = đã có meta JSON
 ALTER TABLE stories ADD COLUMN IF NOT EXISTS meta_status VARCHAR(30) DEFAULT NULL;
 
+-- Migration: thêm target_machine vào agent_commands
+-- Mỗi lệnh chỉ gửi đến đúng admin/máy có tên này — tránh máy khác nhận lệnh nhầm
+ALTER TABLE agent_commands ADD COLUMN IF NOT EXISTS target_machine VARCHAR(100) DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_agent_commands_target ON agent_commands(target_machine, status);
+
 -- ============================================================
 -- Migrate data từ MariaDB (chạy sau khi dump ra CSV)
 -- COPY stories FROM '/path/to/stories.csv' CSV HEADER;

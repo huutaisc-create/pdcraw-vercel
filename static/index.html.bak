@@ -978,8 +978,7 @@
             if (_discoveryInterval) { clearInterval(_discoveryInterval); _discoveryInterval = null; }
             resetDiscoveryUI();
             try {
-                const _admin = localStorage.getItem('admin_name') || '';
-                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'cancel_all_pending', admin: _admin})});
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'cancel_all_pending'})});
                 const data = await res.json();
                 status.innerText = `🗑 Đã hủy ${data.cancelled || 0} lệnh trong hàng đợi.`;
             } catch(e) {
@@ -1232,7 +1231,7 @@
                 const res = await fetch('/api', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ action: 'kill_scrapers', kill_chrome: true, admin: localStorage.getItem('admin_name') || '' })
+                    body: JSON.stringify({ action: 'kill_scrapers', kill_chrome: true })
                 });
                 const data = await res.json();
                 if (!data.success) {

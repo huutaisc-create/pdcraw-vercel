@@ -265,21 +265,6 @@ class handler(BaseHTTPRequestHandler):
                     else:
                         self._json({'error': 'Not found'}, 404)
 
-            # ── list queue stories (per-admin) ──────────────────────────────
-            elif action == 'list_queue':
-                admin = params.get('admin', [''])[0]
-                if not admin:
-                    self._json({'success': False, 'message': 'Missing admin'}, 400)
-                else:
-                    cur.execute("""
-                        SELECT id, title, slug, crawl_status, downloaded_chapters, chapters
-                        FROM stories
-                        WHERE crawl_status IN ('selected','repairing')
-                          AND admin_control = %s
-                        ORDER BY id
-                    """, (admin,))
-                    self._json({'success': True, 'stories': [dict(r) for r in cur.fetchall()]})
-
             else:
                 self._json({'error': f'unknown GET action: {action}'}, 400)
 
@@ -322,31 +307,20 @@ class handler(BaseHTTPRequestHandler):
                 conn = get_conn(); cur = conn.cursor()
                 import datetime
 
-                # target_machine: lệnh chỉ gửi đến đúng máy của admin này
-                target_machine = data.get('admin') or data.get('target_machine') or ''
-
-                # Nếu gửi STOP khẩn cấp, huỷ bỏ lệnh pending của ĐÚNG admin đó
+                # N\u1ebfu g\u1eedi STOP kh\u1ea9n c\u1ea5p, h\u1ee7y b\u1ecf T\u1ea4T C\u1ea2 c\u00e1c l\u1ec7nh k\u1eb9t c\u0169 d\u1ecdn s\u1ea1ch b\u00e0n 
                 if action == 'kill_scrapers':
-                    if target_machine:
-                        cur.execute("""
-                            UPDATE agent_commands
-                            SET status = 'cancelled',
-                                result = '{"note":"Máy chủ đã huỷ bỏ do lệnh STOP KHẨN CẤP"}'
-                            WHERE status = 'pending' AND target_machine = %s
-                        """, (target_machine,))
-                    else:
-                        cur.execute("""
-                            UPDATE agent_commands
-                            SET status = 'cancelled',
-                                result = '{"note":"Máy chủ đã huỷ bỏ do lệnh STOP KHẨN CẤP"}'
-                            WHERE status = 'pending'
-                        """)
-
+                    cur.execute("""
+                        UPDATE agent_commands 
+                        SET status = 'cancelled', 
+                            result = '{"note":"M\\u00e1y ch\\u1ee7 \\u0111\\u00e3 hu\\u1ef7 b\\u1ecf do l\\u1ec7nh STOP KH\\u1ea8N C\\u1ea4P"}' 
+                        WHERE status = 'pending'
+                    """)
+                    
                 cur.execute("""
-                    INSERT INTO agent_commands (action, payload, status, created_at, target_machine)
-                    VALUES (%s, %s, 'pending', %s, %s)
+                    INSERT INTO agent_commands (action, payload, status, created_at)
+                    VALUES (%s, %s, 'pending', %s)
                     RETURNING id
-                """, (action, json.dumps(data, ensure_ascii=False), datetime.datetime.utcnow(), target_machine or None))
+                """, (action, json.dumps(data, ensure_ascii=False), datetime.datetime.utcnow()))
                 cmd_id = cur.fetchone()['id']
                 conn.commit(); conn.close()
                 self._json({'success': True, 'queued': True, 'command_id': cmd_id,
@@ -397,25 +371,13 @@ class handler(BaseHTTPRequestHandler):
             conn = get_conn(); cur = conn.cursor()
 
             if action == 'cancel_all_pending':
-                # Huỷ lệnh pending/running — chỉ của admin này
-                target_machine = data.get('admin') or data.get('target_machine') or ''
-                action_filter  = data.get('action_filter')
-                if target_machine and action_filter:
-                    cur.execute("""
-                        UPDATE agent_commands SET status='cancelled'
-                        WHERE status IN ('pending','running')
-                          AND target_machine = %s AND action = %s
-                    """, (target_machine, action_filter))
-                elif target_machine:
-                    cur.execute("""
-                        UPDATE agent_commands SET status='cancelled'
-                        WHERE status IN ('pending','running') AND target_machine = %s
-                    """, (target_machine,))
-                elif action_filter:
+                # Xóa toàn bộ lệnh pending/running khỏi hàng đợi agent
+                target = data.get('action_filter')  # None = xóa tất cả
+                if target:
                     cur.execute("""
                         UPDATE agent_commands SET status='cancelled'
                         WHERE status IN ('pending','running') AND action = %s
-                    """, (action_filter,))
+                    """, (target,))
                 else:
                     cur.execute("""
                         UPDATE agent_commands SET status='cancelled'

@@ -56,39 +56,22 @@ class handler(BaseHTTPRequestHandler):
         action = params.get('action', [''])[0]
 
         if action == 'poll':
-            # admin_name dùng để lọc lệnh — chỉ nhận lệnh của đúng admin/máy này
-            admin_name = params.get('admin_name', [''])[0]
             try:
                 get_conn, _ = _import_db()
                 conn = get_conn(); cur = conn.cursor()
-                # Atomic claim: chỉ lấy lệnh của admin này (target_machine = admin_name)
-                # hoặc lệnh không có target (NULL) nếu không truyền admin_name
-                if admin_name:
-                    cur.execute("""
-                        UPDATE agent_commands SET status = 'running'
-                        WHERE id = (
-                            SELECT id FROM agent_commands
-                            WHERE status = 'pending'
-                              AND target_machine = %s
-                            ORDER BY created_at ASC
-                            LIMIT 1
-                            FOR UPDATE SKIP LOCKED
-                        )
-                        RETURNING id, action, payload
-                    """, (admin_name,))
-                else:
-                    cur.execute("""
-                        UPDATE agent_commands SET status = 'running'
-                        WHERE id = (
-                            SELECT id FROM agent_commands
-                            WHERE status = 'pending'
-                              AND (target_machine IS NULL OR target_machine = '')
-                            ORDER BY created_at ASC
-                            LIMIT 1
-                            FOR UPDATE SKIP LOCKED
-                        )
-                        RETURNING id, action, payload
-                    """)
+                # BUG 1 FIX: atomic claim — UPDATE + RETURNING để tránh race condition
+                # poll nhiều lần sẽ không bao giờ lấy cùng 1 lệnh hai lần
+                cur.execute("""
+                    UPDATE agent_commands SET status = 'running'
+                    WHERE id = (
+                        SELECT id FROM agent_commands
+                        WHERE status = 'pending'
+                        ORDER BY created_at ASC
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    RETURNING id, action, payload
+                """)
                 row = cur.fetchone()
                 conn.commit()
                 conn.close()
@@ -216,94 +199,57 @@ class handler(BaseHTTPRequestHandler):
                 conn.commit()
                 self._json({'success': True, 'updated': len(rows)})
 
-            # Lấy story để scrape — strict isolation theo admin + machine_label
+            # Lấy danh sách stories cần scrape (agent dùng khi claim task)
             elif action == 'claim_story':
                 acc_idx       = data.get('account_index', -1)
-                admin_name    = data.get('admin_name', '')
+                admin_name    = data.get('admin_name')
                 source_filter = data.get('source_filter')  # 'PD' | 'WIKI' | None
-                machine_label = data.get('machine_label', '')
+                machine_label = data.get('machine_label', '')   # label của máy đang crawl
 
-                # Bắt buộc có admin_name để tránh claim nhầm story của người khác
-                if not admin_name:
-                    self._json({'success': False, 'message': 'Missing admin_name'}, 400)
-                    conn.close(); return
+                admin_filter = "AND (admin_control IS NULL OR admin_control = '')"
+                f_args = []
+                if admin_name:
+                    admin_filter = "AND (admin_control = %s OR admin_control IS NULL OR admin_control = '')"
+                    f_args = [admin_name]
 
-                # Lọc source
+                # Lọc source: PD scraper chỉ nhận PD, Wiki scraper chỉ nhận WIKI
                 source_clause = ""
                 if source_filter == 'WIKI':
                     source_clause = "AND source = 'WIKI'"
                 elif source_filter == 'PD':
                     source_clause = "AND (source = 'PD' OR source IS NULL OR source = '')"
 
-                # storage_label: nếu máy có nhãn thì chỉ nhận story của nhãn đó
-                # nếu máy không có nhãn thì nhận story không có nhãn
-                if machine_label:
-                    storage_clause = "AND storage_label = %s"
-                    storage_args   = [machine_label]
-                else:
-                    storage_clause = "AND (storage_label IS NULL OR storage_label = '')"
-                    storage_args   = []
-
                 cur.execute(f"""
                     SELECT id, slug, title, url, downloaded_chapters, chapters, crawl_status
                     FROM stories
-                    WHERE crawl_status IN ('selected', 'repairing')
-                      AND admin_control = %s
-                      {source_clause}
-                      {storage_clause}
+                    WHERE (
+                        crawl_status = 'repairing'
+                        OR (crawl_status = 'selected' AND (last_account_idx = %s OR last_account_idx IS NULL OR last_account_idx = -1))
+                        OR (crawl_status = 'crawling' AND (last_account_idx = %s OR last_updated < NOW() - INTERVAL '5 minutes'))
+                    )
+                    {source_clause}
+                    AND (storage_label IS NULL OR storage_label = '' OR storage_label = %s)
+                    {admin_filter}
                     ORDER BY
-                        CASE WHEN crawl_status = 'repairing' THEN 0 ELSE 1 END,
-                        CASE WHEN last_account_idx = %s THEN 0 ELSE 1 END,
-                        CASE WHEN COALESCE(chapters,0) > 0
-                             THEN CAST(COALESCE(downloaded_chapters,0) AS numeric) / COALESCE(chapters,0)
-                             ELSE -1 END DESC,
+                        CASE WHEN crawl_status='repairing' THEN 0
+                             WHEN crawl_status='crawling' AND last_account_idx=%s THEN 1
+                             WHEN crawl_status='selected' AND last_account_idx=%s THEN 2
+                             WHEN crawl_status='selected' AND (last_account_idx IS NULL OR last_account_idx = -1) THEN 3
+                             ELSE 4 END,
+                        CASE WHEN COALESCE(chapters,0) > 0 THEN CAST(COALESCE(downloaded_chapters,0) AS numeric) / COALESCE(chapters,0) ELSE -1 END DESC,
                         id ASC
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
-                """, [admin_name] + storage_args + [acc_idx])
+                """, [acc_idx, acc_idx, machine_label] + f_args + [acc_idx, acc_idx])
 
                 story = cur.fetchone()
                 if story:
-                    cur.execute("""
-                        UPDATE stories
-                        SET crawl_status = 'crawling',
-                            last_account_idx = %s,
-                            storage_label = %s,
-                            last_updated = NOW()
-                        WHERE id = %s
-                    """, (acc_idx, machine_label or None, story['id']))
+                    cur.execute("UPDATE stories SET crawl_status='crawling', last_account_idx=%s, storage_label=%s, last_updated=NOW() WHERE id=%s",
+                                (acc_idx, machine_label or None, story['id']))
                     conn.commit()
                     self._json({'success': True, 'story': dict(story)})
                 else:
                     self._json({'success': True, 'story': None})
-
-            # Recover story bị stuck — chỉ lấy lại story của đúng máy này
-            elif action == 'recover_stuck_stories':
-                admin_name    = data.get('admin_name', '')
-                machine_label = data.get('machine_label', '')
-                if not admin_name:
-                    self._json({'success': False, 'message': 'Missing admin_name'}, 400)
-                    conn.close(); return
-
-                if machine_label:
-                    storage_clause = "AND storage_label = %s"
-                    storage_args   = [machine_label]
-                else:
-                    storage_clause = "AND (storage_label IS NULL OR storage_label = '')"
-                    storage_args   = []
-
-                cur.execute(f"""
-                    UPDATE stories
-                    SET crawl_status = 'selected', last_updated = NOW()
-                    WHERE crawl_status = 'crawling'
-                      AND admin_control = %s
-                      {storage_clause}
-                      AND last_updated < NOW() - INTERVAL '5 minutes'
-                    RETURNING id, slug, title
-                """, [admin_name] + storage_args)
-                recovered = [dict(r) for r in cur.fetchall()]
-                conn.commit()
-                self._json({'success': True, 'recovered': recovered, 'count': len(recovered)})
 
             else:
                 self._json({'error': f'unknown action: {action}'}, 400)

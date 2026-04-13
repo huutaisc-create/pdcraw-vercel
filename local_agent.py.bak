@@ -119,8 +119,7 @@ def _request(method, path, body=None, timeout=30):
     return json.loads(raw) if raw else {}
 
 def poll_command():
-    admin = urllib.parse.quote(CFG.get('admin_name', ''), safe='')
-    return _request('GET', f'/api/agent?action=poll&admin_name={admin}')
+    return _request('GET', '/api/agent?action=poll')
 
 def report_done(cmd_id, result, status='done'):
     _request('POST', '/api/agent?action=done', {'command_id': cmd_id, 'result': result, 'status': status})
