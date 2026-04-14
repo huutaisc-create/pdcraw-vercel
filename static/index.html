@@ -1004,7 +1004,7 @@
             status.innerText = "Đang khởi động...";
 
             try {
-                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'submit_discovery', url, source})});
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'submit_discovery', url, source, admin: localStorage.getItem('admin_name') || ''})});
                 const data = await res.json();
                 if (data.success && data.command_id) {
                     status.innerText = `[${source}] Scanner đang chạy...`;
@@ -1281,7 +1281,7 @@
 
 
         async function syncProgress() {
-            const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'sync_progress'})});
+            const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'sync_progress', admin: localStorage.getItem('admin_name') || ''})});
             const data = await res.json();
             if (data.success) { alert('Đã cập nhật xong tiến độ từ ổ đĩa!'); loadStories(); }
         }
@@ -1396,7 +1396,7 @@
             btn.innerText = "⏳..."; btn.disabled = true;
 
             try {
-                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'sync_selected', ids, titles})});
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'sync_selected', ids, titles, admin: localStorage.getItem('admin_name') || ''})});
                 const data = await res.json();
                 if (data.queued) showToast('✅ Đã gửi lệnh sync cho agent.', 'green');
                 else alert(data.message || JSON.stringify(data));
@@ -1434,7 +1434,8 @@
                     action: 'import_local_data',
                     story_id: _importLocalStoryId,
                     folder_name: folderName,
-                    storage_label: machine
+                    storage_label: machine,
+                    admin: localStorage.getItem('admin_name') || ''
                 })});
                 const data = await res.json();
                 if (!data.queued) {
@@ -1505,7 +1506,8 @@
                 const res = await fetch('/api', { method: 'POST', body: JSON.stringify({
                     action: 'delete_menu_map',
                     ids: ids,
-                    story_ids: ids
+                    story_ids: ids,
+                    admin: localStorage.getItem('admin_name') || ''
                 })});
                 const data = await res.json();
                 if (data.success) {
@@ -1815,7 +1817,7 @@
             try {
                 const res = await fetch('/api', {
                     method: 'POST',
-                    body: JSON.stringify({ action: 'check_upload_content', ids: ids, min_chars: minChars })
+                    body: JSON.stringify({ action: 'check_upload_content', ids: ids, min_chars: minChars, admin: localStorage.getItem('admin_name') || '' })
                 });
                 const data = await res.json();
 
@@ -2000,7 +2002,8 @@
                             secret: secret,
                             skip_errors: skipErrors,
                             min_chars: parseInt(document.getElementById('cu-min-chars').value) || 500,
-                            batch_size: batchSize
+                            batch_size: batchSize,
+                            admin: localStorage.getItem('admin_name') || ''
                         })
                     });
                     const result = await res.json();
@@ -2057,7 +2060,7 @@
             status.innerText = "Đang khởi động tiến trình quét...";
             
             try {
-                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'scan_updates'})});
+                const res = await fetch('/api', {method: 'POST', body: JSON.stringify({action: 'scan_updates', admin: localStorage.getItem('admin_name') || ''})});
                 const data = await res.json();
                 if(data.success) {
                     status.innerText = "Scanner is running... Please wait...";
