@@ -197,10 +197,17 @@ def _wait_bot_claimed_story(acc_idx, timeout=120):
 def handle_start_scraper(payload, cmd_id):
     global SCRAPER_PIDS
     admin         = payload.get('admin', CFG.get('admin_name'))
-    account_idxs  = payload.get('accounts', [])
-    threads       = int(payload.get('threads', len(account_idxs)))
+    all_accounts  = payload.get('accounts', [])
+    threads       = int(payload.get('threads', len(all_accounts)))
     source        = payload.get('source', 'PD').upper()   # 'PD' hoặc 'WIKI'
-    account_idxs  = account_idxs[:threads]
+
+    if source == 'WIKI':
+        # WIKI: pool = toàn bộ account đã chọn, threads = số bot launch
+        wiki_pool    = all_accounts          # 19 accounts (full pool)
+        account_idxs = all_accounts[:threads]  # chỉ lấy N account đầu làm acc_idx cho từng bot
+    else:
+        account_idxs = all_accounts[:threads]
+        wiki_pool    = []
 
     # Chọn đúng script theo source
     if source == 'WIKI':
@@ -216,6 +223,7 @@ def handle_start_scraper(payload, cmd_id):
     stop_file      = os.path.join(scraper_dir, 'stop.signal')
     lock_file      = os.path.join(scraper_dir, 'startup.lock')
     depleted_file  = os.path.join(scraper_dir, 'wiki_depleted.json')
+    inuse_file     = os.path.join(scraper_dir, 'wiki_in_use.json')
     if os.path.exists(stop_file):
         os.remove(stop_file)
     # Giải phóng startup lock cũ (có thể còn kẹt từ lần chạy trước) trước khi launch bot
@@ -225,13 +233,15 @@ def handle_start_scraper(payload, cmd_id):
             print(f"[*] Đã xóa startup.lock cũ trước khi khởi động bot.")
         except Exception as e:
             print(f"[!] Không xóa được startup.lock: {e}")
-    # Xóa depleted list cũ khi bắt đầu session WIKI mới (user chủ động nhấn start)
-    if source == 'WIKI' and os.path.exists(depleted_file):
-        try:
-            os.remove(depleted_file)
-            print(f"[*] Đã xóa wiki_depleted.json — session mới, reset quota tracking.")
-        except Exception as e:
-            print(f"[!] Không xóa được wiki_depleted.json: {e}")
+    # Xóa depleted + in_use cũ khi bắt đầu session WIKI mới
+    if source == 'WIKI':
+        for fpath, fname in [(depleted_file, 'wiki_depleted.json'), (inuse_file, 'wiki_in_use.json')]:
+            if os.path.exists(fpath):
+                try:
+                    os.remove(fpath)
+                    print(f"[*] Đã xóa {fname} — session mới.")
+                except Exception as e:
+                    print(f"[!] Không xóa được {fname}: {e}")
 
     pids = []
     for i, acc_idx in enumerate(account_idxs):
@@ -245,13 +255,14 @@ def handle_start_scraper(payload, cmd_id):
             bot_env['ACCOUNTS_FILE']       = str(ACCOUNTS_FILE)
             bot_env['WIKI_ACCOUNTS_FILE']  = str(WIKI_ACCOUNTS_FILE)  # ← truyền cho wiki
             bot_env['MACHINE_LABEL'] = MACHINE_LABEL   # truyền nhãn máy cho scraper
-            if source != 'WIKI':
-                # PD scraper: chia đều accounts cho từng bot — bot i lấy các index i, i+N, i+2N,...
+            if source == 'WIKI':
+                # WIKI: tất cả bot dùng chung pool đầy đủ — mỗi bot xoay vòng 19 accounts
+                bot_env['BOT_ASSIGNED_ACCOUNTS'] = ','.join(str(x) for x in wiki_pool)
+            else:
+                # PD: chia đều accounts cho từng bot — bot i lấy các index i, i+N, i+2N,...
                 n_bots = len(account_idxs)
                 bot_assigned = [account_idxs[j] for j in range(i, len(account_idxs), n_bots)]
                 bot_env['BOT_ASSIGNED_ACCOUNTS'] = ','.join(str(x) for x in bot_assigned)
-            # WIKI scraper: không set BOT_ASSIGNED_ACCOUNTS → bot load toàn bộ account pool
-            # acc_idx truyền qua argument đã đủ để bot bắt đầu ở account khác nhau
 
             proc = subprocess.Popen(
                 [sys.executable, script_path, str(acc_idx), '--admin', admin],

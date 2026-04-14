@@ -697,7 +697,8 @@
                 const category = document.getElementById('category-filter').value;
                 const book_status = document.getElementById('book-status-filter').value;
                 const curAdmin = localStorage.getItem('admin_name');
-                const res = await _fetchAPI(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&admin=${curAdmin || ''}&source=${currentSource}`);
+                const curMachine = localStorage.getItem('machine_label') || '';
+                const res = await _fetchAPI(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&admin=${curAdmin || ''}&machine_label=${encodeURIComponent(curMachine)}&source=${currentSource}`);
                 
                 if (!res.ok) throw new Error(`Server Error: ${res.status} ${res.statusText}`);
                 

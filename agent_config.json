@@ -1,7 +1,7 @@
 {
   "vercel_url": "https://pdcraw-vercel1.vercel.app/",
   "agent_secret": "changeme",
-  "admin_name": "Admin",
+  "admin_name": "admin1",
   "data_import_dir": "D:\\Webtruyen\\pdcraw\\data_import",
   "scraper_script": "./client-source/pd_scraper_fast-v1.py",
   "discovery_script": "./client-source/pd_discovery_auto.py",

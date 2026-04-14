@@ -235,10 +235,10 @@ class handler(BaseHTTPRequestHandler):
                 elif source_filter == 'PD':
                     source_clause = "AND (source = 'PD' OR source IS NULL OR source = '')"
 
-                # storage_label: nếu máy có nhãn thì chỉ nhận story của nhãn đó
-                # nếu máy không có nhãn thì nhận story không có nhãn
+                # storage_label: nhận story của máy mình HOẶC chưa được gán máy nào
+                # (khi claim xong sẽ tự gán storage_label = machine_label)
                 if machine_label:
-                    storage_clause = "AND storage_label = %s"
+                    storage_clause = "AND (storage_label = %s OR storage_label IS NULL OR storage_label = '')"
                     storage_args   = [machine_label]
                 else:
                     storage_clause = "AND (storage_label IS NULL OR storage_label = '')"

@@ -87,7 +87,8 @@ class handler(BaseHTTPRequestHandler):
                 category    = params.get('category',  [''])[0]
                 book_status = params.get('book_status',[''])[0]
                 source      = params.get('source',    [''])[0]
-                admin       = params.get('admin',     [None])[0]
+                admin         = params.get('admin',         [None])[0]
+                machine_label = params.get('machine_label', [''])[0]
                 page        = int(params.get('page',  [1])[0])
                 limit, offset = 50, (page - 1) * 50
 
@@ -97,6 +98,17 @@ class handler(BaseHTTPRequestHandler):
                 if category:    where.append("category = %s");                  args.append(category)
                 if book_status == 'Full':    where.append("book_status = 'Full'")
                 elif book_status == 'Ongoing': where.append("book_status != 'Full'")
+
+                # Filter theo admin + machine: chỉ thấy truyện của mình hoặc chưa gán ai
+                if admin and machine_label:
+                    where.append("""(
+                        (admin_control = %s OR admin_control IS NULL OR admin_control = '')
+                        AND (storage_label = %s OR storage_label IS NULL OR storage_label = '')
+                    )""")
+                    args += [admin, machine_label]
+                elif admin:
+                    where.append("(admin_control = %s OR admin_control IS NULL OR admin_control = '')")
+                    args.append(admin)
 
                 # Filter status: 'crawl_done' = truyện đã cào xong 100%
                 if status == 'crawl_done':
@@ -123,15 +135,19 @@ class handler(BaseHTTPRequestHandler):
                 cur.execute(f"SELECT COUNT(*) AS total FROM stories {w}", args)
                 total = cur.fetchone()['total']
 
-                cur.execute("SELECT COUNT(*) AS q FROM stories WHERE crawl_status IN ('selected','repairing')")
+                if admin:
+                    cur.execute("SELECT COUNT(*) AS q FROM stories WHERE crawl_status IN ('selected','repairing') AND admin_control = %s", (admin,))
+                else:
+                    cur.execute("SELECT COUNT(*) AS q FROM stories WHERE crawl_status IN ('selected','repairing')")
                 q_count = cur.fetchone()['q']
-                cur.execute("SELECT COUNT(*) AS r FROM stories WHERE crawl_status = 'crawling'")
+
+                if admin:
+                    cur.execute("SELECT COUNT(*) AS r FROM stories WHERE crawl_status = 'crawling' AND admin_control = %s", (admin,))
+                else:
+                    cur.execute("SELECT COUNT(*) AS r FROM stories WHERE crawl_status = 'crawling'")
                 r_count = cur.fetchone()['r']
 
-                q_mine = 0
-                if admin:
-                    cur.execute("SELECT COUNT(*) AS qm FROM stories WHERE crawl_status IN ('selected','repairing') AND admin_control = %s", (admin,))
-                    q_mine = cur.fetchone()['qm']
+                q_mine = q_count  # đã filter theo admin rồi nên my_queue = queue
 
                 self._json({
                     'stories': stories, 'total': total, 'page': page,
