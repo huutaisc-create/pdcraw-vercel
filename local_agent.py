@@ -220,8 +220,9 @@ def handle_start_scraper(payload, cmd_id):
         script_path = SCRAPER_PATH
 
     scraper_dir    = os.path.dirname(os.path.abspath(script_path))
-    stop_file      = os.path.join(scraper_dir, 'stop.signal')
-    lock_file      = os.path.join(scraper_dir, 'startup.lock')
+    source_key     = source.lower()                                         # 'pd' hoặc 'wiki'
+    stop_file      = os.path.join(scraper_dir, f'stop_{source_key}.signal')
+    lock_file      = os.path.join(scraper_dir, f'startup_{source_key}.lock')
     depleted_file  = os.path.join(scraper_dir, 'wiki_depleted.json')
     inuse_file     = os.path.join(scraper_dir, 'wiki_in_use.json')
     if os.path.exists(stop_file):
@@ -230,9 +231,9 @@ def handle_start_scraper(payload, cmd_id):
     if os.path.exists(lock_file):
         try:
             os.remove(lock_file)
-            print(f"[*] Đã xóa startup.lock cũ trước khi khởi động bot.")
+            print(f"[*] Đã xóa {os.path.basename(lock_file)} cũ trước khi khởi động bot.")
         except Exception as e:
-            print(f"[!] Không xóa được startup.lock: {e}")
+            print(f"[!] Không xóa được {os.path.basename(lock_file)}: {e}")
     # Xóa depleted + in_use cũ khi bắt đầu session WIKI mới
     if source == 'WIKI':
         for fpath, fname in [(depleted_file, 'wiki_depleted.json'), (inuse_file, 'wiki_in_use.json')]:
@@ -1046,28 +1047,49 @@ def handle_kill_scrapers(payload, cmd_id):
             return
         KILL_RUNNING = True
 
+    # Xác định source cần stop (từ payload). Nếu không có → stop tất cả (backward compat)
+    target_source = (payload.get('source') or '').strip().upper()  # 'PD', 'WIKI', hoặc ''
+
+    # Map source → (script_path, src_key)
+    source_map = []
+    if not target_source or target_source == 'PD':
+        source_map.append((SCRAPER_PATH, 'pd'))
+    if not target_source or target_source == 'WIKI':
+        source_map.append((WIKI_SCRAPER_PATH, 'wiki'))
+
+    print(f"[!] Kill target source: '{target_source or 'ALL'}' → {[s[1] for s in source_map]}")
+
     try:
-        scraper_dir = os.path.dirname(os.path.abspath(SCRAPER_PATH))
-        stop_file = os.path.join(scraper_dir, 'stop.signal')
-        with open(stop_file, 'w') as f:
-            f.write('STOP')
-        print(f"[!] Wrote stop.signal to {stop_file}")
+        # 1. Ghi stop signal cho đúng source
+        for spath, src_key in source_map:
+            if not spath:
+                continue
+            sdir = os.path.dirname(os.path.abspath(spath))
+            if not os.path.exists(sdir):
+                continue
+            stop_file = os.path.join(sdir, f'stop_{src_key}.signal')
+            with open(stop_file, 'w') as f:
+                f.write('STOP')
+            print(f"[!] Wrote {os.path.basename(stop_file)} to {sdir}")
     except Exception as e:
         print(f"[!] Could not write stop.signal: {e}")
 
-        # 2. Kill các PID đã lưu (start qua Web)
-        with PIDS_LOCK:
-            all_pids = list(set(SCRAPER_PIDS))
-        for pid in all_pids:
-            try:
-                subprocess.run(f"taskkill /PID {pid} /F /T", shell=True, capture_output=True)
-                killed.append(pid)
-            except: pass
+    # 2. Kill các PID đã lưu (start qua Web)
+    with PIDS_LOCK:
+        all_pids = list(set(SCRAPER_PIDS))
+    for pid in all_pids:
+        try:
+            subprocess.run(f"taskkill /PID {pid} /F /T", shell=True, capture_output=True)
+            killed.append(pid)
+        except: pass
 
-    # 3. Kill tất cả python process đang chạy các script cào
-    #    Thu thập tên tất cả script cần kill
+    # 3. Kill python process đang chạy script của đúng source
     scripts_to_kill = set()
-    for spath in [SCRAPER_PATH, WIKI_SCRAPER_PATH, DISCOVERY_PATH, CHECK_UPDATE]:
+    for spath, src_key in source_map:
+        if spath:
+            scripts_to_kill.add(os.path.basename(spath))
+    # Discovery và check_update luôn kill (không phân biệt source)
+    for spath in [DISCOVERY_PATH, CHECK_UPDATE]:
         if spath:
             scripts_to_kill.add(os.path.basename(spath))
     print(f"[!] Scripts to kill: {scripts_to_kill}")

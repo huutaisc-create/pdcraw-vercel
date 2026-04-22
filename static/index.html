@@ -1233,7 +1233,7 @@
                 const res = await fetch('/api', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ action: 'kill_scrapers', kill_chrome: true, admin: localStorage.getItem('admin_name') || '' })
+                    body: JSON.stringify({ action: 'kill_scrapers', kill_chrome: true, source: currentSource, admin: localStorage.getItem('admin_name') || '' })
                 });
                 const data = await res.json();
                 if (!data.success) {
