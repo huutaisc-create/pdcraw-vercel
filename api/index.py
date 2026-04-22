@@ -331,6 +331,7 @@ class handler(BaseHTTPRequestHandler):
             'open_folder',
             'generate_meta_all',  # ← tạo meta.json cho tất cả truyện đã craw
             'import_local_data',
+            'manual_crawl',       # ← cào tay từng chương
         }
 
         if action in LOCAL_ACTIONS:
