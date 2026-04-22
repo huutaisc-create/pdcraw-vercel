@@ -13,7 +13,7 @@ from _db import get_conn, json_serial
 
 # Lazy-load HTML để tránh crash khi cold-start nếu file chưa có
 _HTML_PATH = os.path.join(os.path.dirname(__file__), '..', 'static', 'index.html')
-_HTML_CACHE = None
+_HTML_CACHE = None  # v2
 
 def _get_html():
     global _HTML_CACHE
