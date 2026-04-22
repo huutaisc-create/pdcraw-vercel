@@ -130,6 +130,9 @@
                             </button>
                             <button id="btn-sync" onclick="syncSelected()" class="whitespace-nowrap bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-indigo-500/20 transition-all active:scale-95">SYNC SELECTED</button>
                             <button id="btn-missing" onclick="crawlMissing()" class="whitespace-nowrap bg-purple-500 hover:bg-purple-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-purple-500/20 transition-all active:scale-95">CRAWL MISSING</button>
+                            <button id="btn-manual" onclick="manualCrawl()" class="whitespace-nowrap bg-sky-700 hover:bg-sky-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-sky-500/20 transition-all active:scale-95 flex items-center gap-1.5">
+                                <span>📖</span><span>DOWNLOAD-MANUAL</span>
+                            </button>
                             <button id="btn-change-status" onclick="openChangeStatusModal()" class="whitespace-nowrap bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-yellow-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🏷</span><span>ĐỔI TRẠNG THÁI</span>
                             </button>
@@ -790,7 +793,11 @@
                     }
 
                     tr.className = `border-t border-white/5 transition-all group ${isLocked ? 'opacity-50 grayscale pointer-events-none bg-slate-900/50' : 'hover:bg-white/5'}`;
-    
+                    tr.dataset.storyId    = s.id;
+                    tr.dataset.slug       = s.slug;
+                    tr.dataset.url        = s.url || '';
+                    tr.dataset.downloaded = s.downloaded_chapters || 0;
+
                     tr.innerHTML = `
                         <!-- COL 1: ID / Checkbox -->
                         <td class="p-4 text-center">
@@ -1616,6 +1623,73 @@
             }
             btn.innerText = originalText; btn.disabled = false;
             loadStories();
+        }
+
+        async function manualCrawl() {
+            const checked = document.querySelectorAll('.story-ck:checked');
+            if (checked.length === 0) return alert('Chưa chọn truyện nào!');
+            if (checked.length > 1)  return alert('Chỉ chọn 1 truyện để DOWNLOAD-MANUAL!');
+
+            const ck  = checked[0];
+            const tr  = ck.closest('tr');
+            if (!tr) return alert('Không lấy được dữ liệu truyện.');
+
+            const storyId    = parseInt(tr.dataset.storyId   || '0');
+            const slug       = tr.dataset.slug       || '';
+            const url        = tr.dataset.url        || '';
+            const downloaded = parseInt(tr.dataset.downloaded || '0');
+
+            if (!slug || !url) return alert('Thiếu thông tin truyện (slug / url)!');
+
+            const admin = localStorage.getItem('admin_name') || '';
+            const btn = document.getElementById('btn-manual');
+            const origText = btn.innerHTML;
+            btn.innerHTML = '⏳ Đang mở...'; btn.disabled = true;
+
+            try {
+                const res = await fetch('/api', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action:         'manual_crawl',
+                        story_id:       storyId,
+                        slug:           slug,
+                        url:            url,
+                        downloaded_idx: downloaded,
+                        profile:        0,
+                        admin:          admin
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('❌ ' + (data.message || 'Lỗi gửi lệnh'), 'red');
+                    return;
+                }
+                const cmdId = data.command_id;
+                if (!cmdId) { showToast('❌ Không nhận được command_id', 'red'); return; }
+
+                showToast('⏳ Đang mở Chrome thủ công...', 'green');
+
+                // Poll tối đa 15s để xác nhận agent đã xử lý
+                for (let i = 0; i < 15; i++) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    const r2   = await fetch(`/api?action=get_command_result&command_id=${cmdId}`);
+                    const d2   = await r2.json();
+                    if (d2.status === 'done') {
+                        const pid = d2.result?.pid || '?';
+                        showToast(`✅ Chrome manual đã mở (PID ${pid}). Cuộn trang rồi bấm Enter trong cửa sổ console.`, 'green');
+                        return;
+                    }
+                    if (d2.status === 'error') {
+                        showToast('❌ ' + (d2.result?.message || 'Lỗi agent'), 'red'); return;
+                    }
+                }
+                showToast('⚠ Timeout chờ agent — kiểm tra cửa sổ console trên máy.', 'red');
+            } catch(e) {
+                showToast('❌ Lỗi kết nối: ' + e.message, 'red');
+            } finally {
+                btn.innerHTML = origText; btn.disabled = false;
+            }
         }
 
         function changePage(delta) {

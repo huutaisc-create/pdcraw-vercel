@@ -1574,6 +1574,50 @@ def handle_import_local_data(payload, cmd_id):
         traceback.print_exc()
         report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
 
+def handle_manual_crawl(payload, cmd_id):
+    """Mở Chrome cào thủ công — người dùng bấm Enter để lưu từng màn."""
+    slug        = payload.get('slug', '').strip()
+    url         = payload.get('url', '').strip()
+    story_id    = payload.get('story_id', 0)
+    profile     = int(payload.get('profile', 0))
+    start_idx   = int(payload.get('downloaded_idx', 0))
+
+    if not slug or not url:
+        report_done(cmd_id, {'success': False, 'message': 'Thiếu slug hoặc url'}, 'error')
+        return
+
+    manual_script = os.path.join(os.path.dirname(os.path.abspath(SCRAPER_PATH)), 'pd_manual_crawl.py')
+    if not os.path.exists(manual_script):
+        report_done(cmd_id, {'success': False, 'message': f'Không tìm thấy pd_manual_crawl.py tại {manual_script}'}, 'error')
+        return
+
+    read_url = url.replace('/sach/', '/read/')
+
+    bot_env = os.environ.copy()
+    bot_env['SERVER_URL']      = VERCEL_URL
+    bot_env['AGENT_SECRET']    = AGENT_SECRET
+    bot_env['DATA_IMPORT_DIR'] = str(IMPORT_DIR)
+
+    try:
+        proc = subprocess.Popen(
+            [
+                sys.executable, manual_script,
+                '--url',      read_url,
+                '--slug',     slug,
+                '--profile',  str(profile),
+                '--start',    str(start_idx),
+                '--story-id', str(story_id),
+            ],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            env=bot_env,
+        )
+        print(f'[+] Manual crawl PID {proc.pid} | slug={slug} | profile={profile}')
+        report_done(cmd_id, {'success': True, 'pid': proc.pid, 'slug': slug})
+    except Exception as e:
+        print(f'[!] handle_manual_crawl lỗi: {e}')
+        report_done(cmd_id, {'success': False, 'message': str(e)}, 'error')
+
+
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 HANDLERS = {
@@ -1587,6 +1631,7 @@ HANDLERS = {
     'open_folder':         handle_open_folder,
     'generate_meta_all':   handle_generate_meta_all,
     'import_local_data':   handle_import_local_data,
+    'manual_crawl':        handle_manual_crawl,
 }
 
 def _ts():
