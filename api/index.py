@@ -533,7 +533,7 @@ class handler(BaseHTTPRequestHandler):
                 for sid in ids:
                     cur.execute("UPDATE stories SET crawl_status='repairing' WHERE id=%s", (sid,))
                 conn.commit()
-                self._json({'success': True})
+                self._json({'success': True, 'message': f'✅ Đã chuyển {len(ids)} truyện sang repairing'})
 
             elif action == 'apply_updates':
                 items = data.get('items', [])
