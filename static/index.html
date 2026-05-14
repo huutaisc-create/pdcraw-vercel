@@ -72,6 +72,7 @@
                          <select id="discovery-source" onchange="switchSource(this.value)" class="w-full h-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-3 outline-none focus:border-orange-500 text-xs font-bold text-orange-400 appearance-none">
                              <option value="PD">TruyenPD</option>
                              <option value="WIKI">WikiCV</option>
+                             <option value="MTC">MeTruyenChu</option>
                          </select>
                          <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">▼</div>
                     </div>
@@ -613,8 +614,9 @@
         // ─── SOURCE SWITCHING ───────────────────────────────────────────────
         let currentSource = localStorage.getItem('current_source') || 'PD';
         const SOURCE_STYLES = {
-            'PD':   { label: 'TruyenPD', color: '#f97316', badgeBg: 'rgba(249,115,22,0.2)',  border: 'rgba(249,115,22,0.3)' },
-            'WIKI': { label: 'WikiCV',   color: '#3b82f6', badgeBg: 'rgba(59,130,246,0.2)',  border: 'rgba(59,130,246,0.3)' },
+            'PD':   { label: 'TruyenPD',    color: '#f97316', badgeBg: 'rgba(249,115,22,0.2)',  border: 'rgba(249,115,22,0.3)' },
+            'WIKI': { label: 'WikiCV',       color: '#3b82f6', badgeBg: 'rgba(59,130,246,0.2)',  border: 'rgba(59,130,246,0.3)' },
+            'MTC':  { label: 'MeTruyenChu', color: '#10b981', badgeBg: 'rgba(16,185,129,0.2)',  border: 'rgba(16,185,129,0.3)' },
         };
 
         function applySourceStyle(src) {

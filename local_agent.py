@@ -69,14 +69,17 @@ def resolve_path(p):
         return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), p))
     return p
 
-IMPORT_DIR         = resolve_path(CFG['data_import_dir'])
-SCRAPER_PATH       = resolve_path(CFG['scraper_script'])
-WIKI_SCRAPER_PATH  = resolve_path(CFG.get('wiki_scraper_script', ''))
-MTC_SCRAPER_PATH   = resolve_path(CFG.get('mtc_scraper_script', ''))    # ← MTC
-DISCOVERY_PATH     = resolve_path(CFG['discovery_script'])
-CHECK_UPDATE       = resolve_path(CFG['check_update_script'])
-ACCOUNTS_FILE      = resolve_path(CFG['accounts_file'])
-WIKI_ACCOUNTS_FILE = resolve_path(CFG.get('wiki_accounts_file', ''))
+IMPORT_DIR           = resolve_path(CFG['data_import_dir'])
+SCRAPER_PATH         = resolve_path(CFG['scraper_script'])
+WIKI_SCRAPER_PATH    = resolve_path(CFG.get('wiki_scraper_script', ''))
+MTC_SCRAPER_PATH     = resolve_path(CFG.get('mtc_scraper_script', ''))      # ← MTC
+DISCOVERY_PATH       = resolve_path(CFG['discovery_script'])
+MTC_DISCOVERY_PATH   = resolve_path(CFG.get('mtc_discovery_script',         # ← MTC discovery
+    os.path.join(os.path.dirname(resolve_path(CFG.get('mtc_scraper_script',''))), 'mtc_discovery_auto.py')
+    if CFG.get('mtc_scraper_script') else ''))
+CHECK_UPDATE         = resolve_path(CFG['check_update_script'])
+ACCOUNTS_FILE        = resolve_path(CFG['accounts_file'])
+WIKI_ACCOUNTS_FILE   = resolve_path(CFG.get('wiki_accounts_file', ''))
 MACHINE_LABEL = CFG.get('machine_label', '')   # Nhãn máy này: 'A', 'B', 'C'...
 
 HEADERS = {'X-Agent-Secret': AGENT_SECRET, 'Content-Type': 'application/json'}
@@ -1181,10 +1184,23 @@ def handle_kill_scrapers(payload, cmd_id):
 
 def handle_submit_discovery(payload, cmd_id):
     url    = payload.get('url', '')
-    source = payload.get('source', 'PD')
+    source = payload.get('source', 'PD').upper()
+
+    # Chọn đúng discovery script theo source
+    if source == 'MTC':
+        disc_path = MTC_DISCOVERY_PATH
+    else:
+        disc_path = DISCOVERY_PATH   # PD hoặc WIKI đều dùng pd_discovery_auto.py
+
     print(f"  [{_ts()}] DBG [submit_discovery] id={cmd_id}  url={url!r}  source={source}")
-    print(f"  [{_ts()}] DBG [submit_discovery] DISCOVERY_PATH={DISCOVERY_PATH}")
-    print(f"  [{_ts()}] DBG [submit_discovery] File tồn tại: {os.path.exists(DISCOVERY_PATH)}")
+    print(f"  [{_ts()}] DBG [submit_discovery] DISCOVERY_PATH={disc_path}")
+    print(f"  [{_ts()}] DBG [submit_discovery] File tồn tại: {os.path.exists(disc_path) if disc_path else False}")
+
+    if not disc_path or not os.path.exists(disc_path):
+        report_done(cmd_id, {'success': False,
+            'message': f'Discovery script không tìm thấy: {disc_path}'}, 'error')
+        return
+
     try:
         bot_env = os.environ.copy()
         bot_env['SERVER_URL']      = VERCEL_URL
@@ -1195,7 +1211,7 @@ def handle_submit_discovery(payload, cmd_id):
         # Dùng PIPE thay vì CREATE_NEW_CONSOLE để capture stdout/stderr
         # → thấy được lỗi crash của discovery script ngay trong log này
         proc = subprocess.Popen(
-            [sys.executable, DISCOVERY_PATH, '--url', url, '--source', source],
+            [sys.executable, disc_path, '--url', url, '--source', source],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=bot_env,
