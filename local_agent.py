@@ -41,6 +41,7 @@ DEFAULT_CONFIG = {
     "data_import_dir":      "D:\\Webtruyen\\pdcraw\\data_import",
     "scraper_script":       "D:\\Webtruyen\\pdcraw\\pd_scraper_fast-v1.py",
     "wiki_scraper_script":  "D:\\Webtruyen\\pdcraw\\wiki_scraper_agent.py",
+    "mtc_scraper_script":   "D:\\Webtruyen\\pdcraw\\mtc_scraper.py",
     "discovery_script":     "D:\\Webtruyen\\pdcraw\\pd_discovery_auto.py",
     "check_update_script":  "D:\\Webtruyen\\pdcraw\\check_update.py",
     "accounts_file":        "D:\\Webtruyen\\pdcraw\\accounts.txt",
@@ -70,17 +71,18 @@ def resolve_path(p):
 
 IMPORT_DIR         = resolve_path(CFG['data_import_dir'])
 SCRAPER_PATH       = resolve_path(CFG['scraper_script'])
-WIKI_SCRAPER_PATH  = resolve_path(CFG.get('wiki_scraper_script', ''))   # ← mới
+WIKI_SCRAPER_PATH  = resolve_path(CFG.get('wiki_scraper_script', ''))
+MTC_SCRAPER_PATH   = resolve_path(CFG.get('mtc_scraper_script', ''))    # ← MTC
 DISCOVERY_PATH     = resolve_path(CFG['discovery_script'])
 CHECK_UPDATE       = resolve_path(CFG['check_update_script'])
 ACCOUNTS_FILE      = resolve_path(CFG['accounts_file'])
-WIKI_ACCOUNTS_FILE = resolve_path(CFG.get('wiki_accounts_file', ''))    # ← mới
+WIKI_ACCOUNTS_FILE = resolve_path(CFG.get('wiki_accounts_file', ''))
 MACHINE_LABEL = CFG.get('machine_label', '')   # Nhãn máy này: 'A', 'B', 'C'...
 
 HEADERS = {'X-Agent-Secret': AGENT_SECRET, 'Content-Type': 'application/json'}
 
-# Tracking running scraper PIDs
-SCRAPER_PIDS = []
+# Tracking running scraper PIDs — theo source ('pd' / 'wiki' / 'mtc')
+SCRAPER_PIDS = {'pd': [], 'wiki': [], 'mtc': []}   # dict {source: [pid, ...]}
 PIDS_LOCK    = threading.Lock()
 
 # Tracking cmd_ids đang xử lý để tránh chạy lại
@@ -216,6 +218,12 @@ def handle_start_scraper(payload, cmd_id):
             report_done(cmd_id, {'success': False,
                 'message': f'wiki_scraper_script chưa cấu hình hoặc không tồn tại: {script_path}'}, 'error')
             return
+    elif source == 'MTC':
+        script_path = MTC_SCRAPER_PATH
+        if not script_path or not os.path.exists(script_path):
+            report_done(cmd_id, {'success': False,
+                'message': f'mtc_scraper_script chưa cấu hình hoặc không tồn tại: {script_path}'}, 'error')
+            return
     else:
         script_path = SCRAPER_PATH
 
@@ -281,7 +289,8 @@ def handle_start_scraper(payload, cmd_id):
             _wait_bot_claimed_story(acc_idx)
 
     with PIDS_LOCK:
-        SCRAPER_PIDS.extend(pids)
+        src_key = source.lower()   # 'pd' hoặc 'wiki'
+        SCRAPER_PIDS.setdefault(src_key, []).extend(pids)
 
     report_done(cmd_id, {'success': True, 'started': len(pids), 'pids': pids})
 
@@ -1074,10 +1083,13 @@ def handle_kill_scrapers(payload, cmd_id):
     except Exception as e:
         print(f"[!] Could not write stop.signal: {e}")
 
-    # 2. Kill các PID đã lưu (start qua Web)
+    # 2. Kill các PID đã lưu — chỉ kill đúng source
     with PIDS_LOCK:
-        all_pids = list(set(SCRAPER_PIDS))
-    for pid in all_pids:
+        pids_to_kill = []
+        for _, src_key in source_map:
+            pids_to_kill.extend(SCRAPER_PIDS.get(src_key, []))
+        pids_to_kill = list(set(pids_to_kill))
+    for pid in pids_to_kill:
         try:
             subprocess.run(f"taskkill /PID {pid} /F /T", shell=True, capture_output=True)
             killed.append(pid)
@@ -1088,10 +1100,12 @@ def handle_kill_scrapers(payload, cmd_id):
     for spath, src_key in source_map:
         if spath:
             scripts_to_kill.add(os.path.basename(spath))
-    # Discovery và check_update luôn kill (không phân biệt source)
-    for spath in [DISCOVERY_PATH, CHECK_UPDATE]:
-        if spath:
-            scripts_to_kill.add(os.path.basename(spath))
+    # Discovery (pd_discovery_auto.py) — luôn kill khi target là PD hoặc ALL
+    if DISCOVERY_PATH:
+        scripts_to_kill.add(os.path.basename(DISCOVERY_PATH))
+    # check_update.py là script dùng chung (PD + WIKI) → chỉ kill khi target ALL
+    if not target_source and CHECK_UPDATE:
+        scripts_to_kill.add(os.path.basename(CHECK_UPDATE))
     print(f"[!] Scripts to kill: {scripts_to_kill}")
 
     # Thử WMIC trước (Win10), fallback sang tasklist /V (Win11)
@@ -1152,7 +1166,8 @@ def handle_kill_scrapers(payload, cmd_id):
     # Tuy\u1ec7t \u0111\u1ed1i kh\u00f4ng qu\u00e9t global chrome.exe t\u1edbi t\u1ea5t c\u1ea3 user kh\u00e1c tr\u00ean h\u1ec7 \u0111i\u1ec1u h\u00e0nh.
 
     with PIDS_LOCK:
-        SCRAPER_PIDS = []
+        for _, src_key in source_map:
+            SCRAPER_PIDS[src_key] = []
 
     print(f"[!] Kill done. PIDs killed: {killed}")
 
@@ -1649,7 +1664,7 @@ def main():
             hb_counter += 1
             if hb_counter >= 5:
                 with PIDS_LOCK:
-                    running = len(SCRAPER_PIDS)
+                    running = sum(len(v) for v in SCRAPER_PIDS.values())
                 heartbeat(running)
                 hb_counter = 0
 

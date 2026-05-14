@@ -9,5 +9,6 @@
   "accounts_file": "./accounts.txt",
   "wiki_scraper_script": "./client-source/wiki_scraper_agent.py",
   "wiki_accounts_file":  "./client-source/userpass-wiki.txt",
+  "mtc_scraper_script":  "./client-source/mtc_scraper.py",
   "machine_label":       "A"
 }
