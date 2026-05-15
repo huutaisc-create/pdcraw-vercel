@@ -42,6 +42,7 @@ DEFAULT_CONFIG = {
     "scraper_script":       "D:\\Webtruyen\\pdcraw\\pd_scraper_fast-v1.py",
     "wiki_scraper_script":  "D:\\Webtruyen\\pdcraw\\wiki_scraper_agent.py",
     "mtc_scraper_script":   "D:\\Webtruyen\\pdcraw\\mtc_scraper.py",
+    "tf_scraper_script":    "D:\\Webtruyen\\pdcraw\\tf_scraper.py",
     "discovery_script":     "D:\\Webtruyen\\pdcraw\\pd_discovery_auto.py",
     "check_update_script":  "D:\\Webtruyen\\pdcraw\\check_update.py",
     "accounts_file":        "D:\\Webtruyen\\pdcraw\\accounts.txt",
@@ -73,9 +74,15 @@ IMPORT_DIR           = resolve_path(CFG['data_import_dir'])
 SCRAPER_PATH         = resolve_path(CFG['scraper_script'])
 WIKI_SCRAPER_PATH    = resolve_path(CFG.get('wiki_scraper_script', ''))
 MTC_SCRAPER_PATH     = resolve_path(CFG.get('mtc_scraper_script', ''))      # ← MTC
+TF_SCRAPER_PATH      = resolve_path(CFG.get('tf_scraper_script',            # ← TF
+    os.path.join(os.path.dirname(resolve_path(CFG.get('mtc_scraper_script',''))), 'tf_scraper.py')
+    if CFG.get('mtc_scraper_script') else ''))
 DISCOVERY_PATH       = resolve_path(CFG['discovery_script'])
 MTC_DISCOVERY_PATH   = resolve_path(CFG.get('mtc_discovery_script',         # ← MTC discovery
     os.path.join(os.path.dirname(resolve_path(CFG.get('mtc_scraper_script',''))), 'mtc_discovery_auto.py')
+    if CFG.get('mtc_scraper_script') else ''))
+TF_DISCOVERY_PATH    = resolve_path(CFG.get('tf_discovery_script',          # ← TF discovery
+    os.path.join(os.path.dirname(resolve_path(CFG.get('mtc_scraper_script',''))), 'tf_discovery_auto.py')
     if CFG.get('mtc_scraper_script') else ''))
 CHECK_UPDATE         = resolve_path(CFG['check_update_script'])
 ACCOUNTS_FILE        = resolve_path(CFG['accounts_file'])
@@ -84,8 +91,8 @@ MACHINE_LABEL = CFG.get('machine_label', '')   # Nhãn máy này: 'A', 'B', 'C'.
 
 HEADERS = {'X-Agent-Secret': AGENT_SECRET, 'Content-Type': 'application/json'}
 
-# Tracking running scraper PIDs — theo source ('pd' / 'wiki' / 'mtc')
-SCRAPER_PIDS = {'pd': [], 'wiki': [], 'mtc': []}   # dict {source: [pid, ...]}
+# Tracking running scraper PIDs — theo source ('pd' / 'wiki' / 'mtc' / 'tf')
+SCRAPER_PIDS = {'pd': [], 'wiki': [], 'mtc': [], 'tf': []}   # dict {source: [pid, ...]}
 PIDS_LOCK    = threading.Lock()
 
 # Tracking cmd_ids đang xử lý để tránh chạy lại
@@ -226,6 +233,12 @@ def handle_start_scraper(payload, cmd_id):
         if not script_path or not os.path.exists(script_path):
             report_done(cmd_id, {'success': False,
                 'message': f'mtc_scraper_script chưa cấu hình hoặc không tồn tại: {script_path}'}, 'error')
+            return
+    elif source == 'TF':
+        script_path = TF_SCRAPER_PATH
+        if not script_path or not os.path.exists(script_path):
+            report_done(cmd_id, {'success': False,
+                'message': f'tf_scraper_script chưa cấu hình hoặc không tồn tại: {script_path}'}, 'error')
             return
     else:
         script_path = SCRAPER_PATH
@@ -1068,6 +1081,10 @@ def handle_kill_scrapers(payload, cmd_id):
         source_map.append((SCRAPER_PATH, 'pd'))
     if not target_source or target_source == 'WIKI':
         source_map.append((WIKI_SCRAPER_PATH, 'wiki'))
+    if not target_source or target_source == 'MTC':
+        source_map.append((MTC_SCRAPER_PATH, 'mtc'))
+    if not target_source or target_source == 'TF':
+        source_map.append((TF_SCRAPER_PATH, 'tf'))
 
     print(f"[!] Kill target source: '{target_source or 'ALL'}' → {[s[1] for s in source_map]}")
 
@@ -1189,6 +1206,8 @@ def handle_submit_discovery(payload, cmd_id):
     # Chọn đúng discovery script theo source
     if source == 'MTC':
         disc_path = MTC_DISCOVERY_PATH
+    elif source == 'TF':
+        disc_path = TF_DISCOVERY_PATH
     else:
         disc_path = DISCOVERY_PATH   # PD hoặc WIKI đều dùng pd_discovery_auto.py
 
@@ -1678,6 +1697,52 @@ def main():
         try:
             # Heartbeat m\u1ed7i 15s (5 x 3s)
             hb_counter += 1
+            if hb_counter >= 5:
+                with PIDS_LOCK:
+                    running = sum(len(v) for v in SCRAPER_PIDS.values())
+                heartbeat(running)
+                hb_counter = 0
+
+            # Poll lệnh
+            resp = poll_command()
+            if resp.get('has_command'):
+                cmd_id = resp['id']
+                action = resp['action']
+                payload= resp.get('payload', {})
+
+                # Bỏ qua nếu lệnh này đang được xử lý
+                with PROCESSING_LOCK:
+                    if cmd_id in PROCESSING_IDS:
+                        pass  # skip
+                    else:
+                        PROCESSING_IDS.add(cmd_id)
+                        print(f"[→] Nhận lệnh: {action} (id={cmd_id})")
+                        handler_fn = HANDLERS.get(action)
+                        if handler_fn:
+                            def _run(fn, p, cid):
+                                try:
+                                    fn(p, cid)
+                                finally:
+                                    with PROCESSING_LOCK:
+                                        PROCESSING_IDS.discard(cid)
+                            threading.Thread(
+                                target=_run,
+                                args=(handler_fn, payload, cmd_id),
+                                daemon=True
+                            ).start()
+                        else:
+                            PROCESSING_IDS.discard(cmd_id)
+                            report_done(cmd_id, {'success': False, 'message': f'Unknown action: {action}'}, 'error')
+
+        except KeyboardInterrupt:
+            print("\n[*] Agent dừng."); break
+        except Exception as e:
+            print(f"[!] Lỗi poll: {e}")
+
+        time.sleep(3)
+
+if __name__ == '__main__':
+    main()
             if hb_counter >= 5:
                 with PIDS_LOCK:
                     running = sum(len(v) for v in SCRAPER_PIDS.values())

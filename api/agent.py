@@ -236,6 +236,8 @@ class handler(BaseHTTPRequestHandler):
                     source_clause = "AND (source = 'PD' OR source IS NULL OR source = '')"
                 elif source_filter == 'MTC':
                     source_clause = "AND source = 'MTC'"
+                elif source_filter == 'TF':
+                    source_clause = "AND source = 'TF'"
 
                 # storage_label: nhận story của máy mình HOẶC chưa được gán máy nào
                 # (khi claim xong sẽ tự gán storage_label = machine_label)
