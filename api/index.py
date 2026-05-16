@@ -504,14 +504,55 @@ class handler(BaseHTTPRequestHandler):
                 conn.commit()
                 self._json({'success': True, 'message': f'Updated {len(ids)} stories.'})
 
+            elif action == 'reset_queue':
+                # Đưa toàn bộ 'selected' (chưa crawling) của admin này về 'pending'
+                admin = data.get('admin')
+                source_filter = data.get('source_filter', '')
+                if source_filter == 'TF':
+                    source_clause = "AND source = 'TF'"
+                elif source_filter == 'PD':
+                    source_clause = "AND (source = 'PD' OR source IS NULL OR source = '')"
+                elif source_filter == 'MTC':
+                    source_clause = "AND source = 'MTC'"
+                elif source_filter == 'WIKI':
+                    source_clause = "AND source = 'WIKI'"
+                else:
+                    source_clause = ""
+                if admin:
+                    cur.execute(f"""
+                        UPDATE stories SET crawl_status='pending', admin_control=NULL
+                        WHERE crawl_status='selected' AND admin_control=%s {source_clause}
+                    """, (admin,))
+                else:
+                    cur.execute(f"""
+                        UPDATE stories SET crawl_status='pending', admin_control=NULL
+                        WHERE crawl_status='selected' {source_clause}
+                    """)
+                conn.commit()
+                self._json({'success': True, 'reset': cur.rowcount})
+
             elif action == 'bulk_select_n':
-                n = int(data.get('n', 0)); admin = data.get('admin')
+                n             = int(data.get('n', 0))
+                admin         = data.get('admin')
+                source_filter = data.get('source_filter', '')  # 'TF' | 'PD' | 'MTC' | '' = all
                 if n <= 0:
                     self._json({'success': False, 'message': 'n phải lớn hơn 0'}); conn.close(); return
-                cur.execute("""
+                if source_filter == 'TF':
+                    source_clause = "AND source = 'TF'"
+                elif source_filter == 'PD':
+                    source_clause = "AND (source = 'PD' OR source IS NULL OR source = '')"
+                elif source_filter == 'MTC':
+                    source_clause = "AND source = 'MTC'"
+                elif source_filter == 'WIKI':
+                    source_clause = "AND source = 'WIKI'"
+                else:
+                    source_clause = ""
+                cur.execute(f"""
                     UPDATE stories SET crawl_status='selected', admin_control=%s
                     WHERE id IN (
-                        SELECT id FROM stories WHERE crawl_status='pending'
+                        SELECT id FROM stories
+                        WHERE crawl_status='pending'
+                        {source_clause}
                         ORDER BY id ASC LIMIT %s
                     )
                 """, (admin, n))

@@ -148,6 +148,7 @@
                             <div class="flex items-center gap-1">
                                 <input type="number" id="bulk-n-input" min="1" max="9999" placeholder="N" class="w-16 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-center outline-none focus:border-violet-500 text-violet-300 font-bold" onkeydown="if(event.key==='Enter') bulkSelectN()">
                                 <button onclick="bulkSelectN()" class="whitespace-nowrap bg-violet-700 hover:bg-violet-600 text-white font-bold py-1.5 px-3 rounded text-[11px] shadow-lg transition-all active:scale-95" title="Chọn N truyện pending đầu tiên (theo ID)">+ CHỌN N</button>
+                                <button onclick="resetQueue()" class="whitespace-nowrap bg-rose-800 hover:bg-rose-700 text-white font-bold py-1.5 px-3 rounded text-[11px] shadow-lg transition-all active:scale-95" title="Trả toàn bộ selected về pending">↺ XÓA HÀNG ĐỢI</button>
                             </div>
                             <button id="btn-change-status" onclick="openChangeStatusModal()" class="whitespace-nowrap bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-yellow-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🏷</span><span>ĐỔI TRẠNG THÁI</span>
@@ -1414,10 +1415,11 @@
             if (!n || n <= 0) { input.focus(); return; }
             const admin = localStorage.getItem('admin_name');
             if (!admin) return alert('Bạn chưa đăng nhập!');
+            const source_filter = (document.getElementById('discovery-source')?.value) || '';
             const btn = document.querySelector('[onclick="bulkSelectN()"]');
             if (btn) { btn.disabled = true; btn.textContent = '...'; }
             try {
-                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'bulk_select_n', n, admin }) });
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'bulk_select_n', n, admin, source_filter }) });
                 const data = await res.json();
                 if (data.success) {
                     input.value = '';
@@ -1429,6 +1431,29 @@
                 alert('Lỗi: ' + e);
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = '+ CHỌN N'; }
+            }
+        }
+
+        async function resetQueue() {
+            const admin = localStorage.getItem('admin_name');
+            if (!admin) return alert('Bạn chưa đăng nhập!');
+            const source_filter = (document.getElementById('discovery-source')?.value) || '';
+            const label = source_filter ? `source=${source_filter}` : 'tất cả source';
+            if (!confirm(`Trả toàn bộ truyện SELECTED (${label}) về PENDING?\nTruyện đang CRAWLING sẽ không bị ảnh hưởng.`)) return;
+            const btn = document.querySelector('[onclick="resetQueue()"]');
+            if (btn) { btn.disabled = true; btn.textContent = '...'; }
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'reset_queue', admin, source_filter }) });
+                const data = await res.json();
+                if (data.success) {
+                    loadStories();
+                } else {
+                    alert('Lỗi: ' + (data.message || 'Unknown'));
+                }
+            } catch(e) {
+                alert('Lỗi: ' + e);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '↺ XÓA HÀNG ĐỢI'; }
             }
         }
 
