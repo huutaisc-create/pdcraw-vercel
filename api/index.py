@@ -85,7 +85,8 @@ class handler(BaseHTTPRequestHandler):
                 search      = params.get('search',    [''])[0]
                 status      = params.get('status',    [''])[0]
                 category    = params.get('category',  [''])[0]
-                book_status = params.get('book_status',[''])[0]
+                book_status    = params.get('book_status',   [''])[0]
+                chapters_range = params.get('chapters_range',[''])[0]
                 source      = params.get('source',    [''])[0]
                 admin         = params.get('admin',         [None])[0]
                 machine_label = params.get('machine_label', [''])[0]
@@ -98,6 +99,23 @@ class handler(BaseHTTPRequestHandler):
                 if category:    where.append("category = %s");                  args.append(category)
                 if book_status == 'Full':    where.append("book_status = 'Full'")
                 elif book_status == 'Ongoing': where.append("book_status != 'Full'")
+
+                # Filter theo số chương
+                _cr_map = {
+                    'lt100':     ("chapters < 100",),
+                    '100-200':   ("chapters >= 100 AND chapters < 200",),
+                    '200-300':   ("chapters >= 200 AND chapters < 300",),
+                    '300-400':   ("chapters >= 300 AND chapters < 400",),
+                    '400-500':   ("chapters >= 400 AND chapters < 500",),
+                    '500-600':   ("chapters >= 500 AND chapters < 600",),
+                    '600-700':   ("chapters >= 600 AND chapters < 700",),
+                    '700-800':   ("chapters >= 700 AND chapters < 800",),
+                    '800-900':   ("chapters >= 800 AND chapters < 900",),
+                    '900-1000':  ("chapters >= 900 AND chapters < 1000",),
+                    'gt1000':    ("chapters >= 1000",),
+                }
+                if chapters_range in _cr_map:
+                    where.append(_cr_map[chapters_range][0])
 
                 # Filter theo admin + machine: chỉ thấy truyện của mình hoặc chưa gán ai
                 if admin and machine_label:
@@ -486,6 +504,20 @@ class handler(BaseHTTPRequestHandler):
                 conn.commit()
                 self._json({'success': True, 'message': f'Updated {len(ids)} stories.'})
 
+            elif action == 'bulk_select_n':
+                n = int(data.get('n', 0)); admin = data.get('admin')
+                if n <= 0:
+                    self._json({'success': False, 'message': 'n phải lớn hơn 0'}); conn.close(); return
+                cur.execute("""
+                    UPDATE stories SET crawl_status='selected', admin_control=%s
+                    WHERE id IN (
+                        SELECT id FROM stories WHERE crawl_status='pending'
+                        ORDER BY id ASC LIMIT %s
+                    )
+                """, (admin, n))
+                conn.commit()
+                self._json({'success': True, 'selected': cur.rowcount})
+
             elif action == 'reset_crawling_all':
                 cur.execute("UPDATE stories SET crawl_status='selected', last_account_idx=NULL WHERE crawl_status IN ('crawling', 'repairing')")
                 conn.commit()
@@ -642,6 +674,7 @@ class handler(BaseHTTPRequestHandler):
                         }
                     })
                 else:
+                    def _s(val, limit=500): return str(val or '')[:limit]
                     cur.execute("""
                         INSERT INTO stories
                             (slug, title, author, category, views, likes, chapters,
@@ -649,17 +682,17 @@ class handler(BaseHTTPRequestHandler):
                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending')
                     """, (
                         slug,
-                        data.get('title', slug),
-                        data.get('author', 'N/A'),
-                        data.get('category', 'N/A'),
-                        str(data.get('views', '0')),
-                        str(data.get('likes', '0')),
+                        _s(data.get('title', slug), 500),
+                        _s(data.get('author', 'N/A'), 200),
+                        _s(data.get('category', 'N/A'), 500),
+                        _s(data.get('views', '0'), 50),
+                        _s(data.get('likes', '0'), 50),
                         int(data.get('chapters', 0) or 0),
-                        data.get('book_status', 'Ongoing'),
-                        data.get('cover_url', ''),
-                        data.get('rating', 'N/A'),
-                        data.get('url', ''),
-                        data.get('source', 'PD'),
+                        _s(data.get('book_status', 'Ongoing'), 50),
+                        _s(data.get('cover_url', ''), 500),
+                        _s(data.get('rating', 'N/A'), 50),
+                        _s(data.get('url', ''), 500),
+                        _s(data.get('source', 'PD'), 50),
                     ))
                     conn.commit()
                     self._json({'success': True, 'inserted': 1, 'slug': slug})

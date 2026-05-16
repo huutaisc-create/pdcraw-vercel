@@ -115,6 +115,20 @@
                                 <option value="error">Lỗi</option>
                                 <option value="uploaded_done">✅ Đã upload xong</option>
                             </select>
+                             <select id="chapters-filter" class="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs outline-none text-sky-400 font-bold" onchange="loadStories()">
+                                <option value="" class="text-slate-400 font-normal">Tất cả số chương</option>
+                                <option value="lt100">&lt; 100 chương</option>
+                                <option value="100-200">100 – 200</option>
+                                <option value="200-300">200 – 300</option>
+                                <option value="300-400">300 – 400</option>
+                                <option value="400-500">400 – 500</option>
+                                <option value="500-600">500 – 600</option>
+                                <option value="600-700">600 – 700</option>
+                                <option value="700-800">700 – 800</option>
+                                <option value="800-900">800 – 900</option>
+                                <option value="900-1000">900 – 1000</option>
+                                <option value="gt1000">&gt; 1000 chương</option>
+                             </select>
                              <select id="check-filter" class="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs outline-none text-amber-400 font-bold" onchange="loadStories()">
                                 <option value="" class="text-slate-400 font-normal">Tất cả nhãn</option>
                                 <option value="warn">⚠ Cần kiểm tra</option>
@@ -131,6 +145,10 @@
                                 <span id="btn-stop-icon">⏹</span><span id="btn-stop-label">STOP</span>
                             </button>
                             <button id="btn-sync" onclick="syncSelected()" class="whitespace-nowrap bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-indigo-500/20 transition-all active:scale-95">SYNC SELECTED</button>
+                            <div class="flex items-center gap-1">
+                                <input type="number" id="bulk-n-input" min="1" max="9999" placeholder="N" class="w-16 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-center outline-none focus:border-violet-500 text-violet-300 font-bold" onkeydown="if(event.key==='Enter') bulkSelectN()">
+                                <button onclick="bulkSelectN()" class="whitespace-nowrap bg-violet-700 hover:bg-violet-600 text-white font-bold py-1.5 px-3 rounded text-[11px] shadow-lg transition-all active:scale-95" title="Chọn N truyện pending đầu tiên (theo ID)">+ CHỌN N</button>
+                            </div>
                             <button id="btn-change-status" onclick="openChangeStatusModal()" class="whitespace-nowrap bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-1.5 px-4 rounded text-[11px] shadow-lg shadow-yellow-500/20 transition-all active:scale-95 flex items-center gap-1.5">
                                 <span>🏷</span><span>ĐỔI TRẠNG THÁI</span>
                             </button>
@@ -699,9 +717,10 @@
                 const status = document.getElementById('status-filter').value;
                 const category = document.getElementById('category-filter').value;
                 const book_status = document.getElementById('book-status-filter').value;
+                const chapters_range = document.getElementById('chapters-filter').value;
                 const curAdmin = localStorage.getItem('admin_name');
                 const curMachine = localStorage.getItem('machine_label') || '';
-                const res = await _fetchAPI(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&admin=${curAdmin || ''}&machine_label=${encodeURIComponent(curMachine)}&source=${currentSource}`);
+                const res = await _fetchAPI(`/api?action=list&page=${curPage}&search=${search}&status=${status}&category=${encodeURIComponent(category)}&book_status=${book_status}&chapters_range=${chapters_range}&admin=${curAdmin || ''}&machine_label=${encodeURIComponent(curMachine)}&source=${currentSource}`);
                 
                 if (!res.ok) throw new Error(`Server Error: ${res.status} ${res.statusText}`);
                 
@@ -1386,6 +1405,30 @@
             } catch(e) {
                 alert("Lỗi: " + e);
                 loadStories(); // Chỉ reload khi lỗi để revert
+            }
+        }
+
+        async function bulkSelectN() {
+            const input = document.getElementById('bulk-n-input');
+            const n = parseInt(input.value);
+            if (!n || n <= 0) { input.focus(); return; }
+            const admin = localStorage.getItem('admin_name');
+            if (!admin) return alert('Bạn chưa đăng nhập!');
+            const btn = document.querySelector('[onclick="bulkSelectN()"]');
+            if (btn) { btn.disabled = true; btn.textContent = '...'; }
+            try {
+                const res = await fetch('/api', { method: 'POST', body: JSON.stringify({ action: 'bulk_select_n', n, admin }) });
+                const data = await res.json();
+                if (data.success) {
+                    input.value = '';
+                    loadStories();
+                } else {
+                    alert('Lỗi: ' + (data.message || 'Unknown'));
+                }
+            } catch(e) {
+                alert('Lỗi: ' + e);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '+ CHỌN N'; }
             }
         }
 
